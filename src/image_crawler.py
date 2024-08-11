@@ -18,13 +18,14 @@ class ImageCrawler(WebCrawler):
             if item is not None:
                 logging.info(item)
                 self.data[url].append(urljoin(url, item['src']))
+        self._unload_data(self.data)
 
 
 if __name__ == '__main__':
     import time
 
     start_time = time.time()
-    crawler = ImageCrawler(start_urls=[fr"https://journal.tinkoff.ru/"],
+    crawler = ImageCrawler(start_urls=["https://www.amazon.com/"],
                            max_urls=1000,
                            max_depth=1)
     crawler.start_crawl()
