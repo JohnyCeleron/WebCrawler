@@ -1,11 +1,10 @@
 import abc
+import asyncio
 import logging
-import time
-from urllib.robotparser import RobotFileParser
-from collections import defaultdict
 from collections import deque
 from urllib.parse import urljoin, urlparse
-import requests
+from urllib.robotparser import RobotFileParser
+import aiohttp
 from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.DEBUG, filename="py_log.log", filemode="w",
@@ -13,13 +12,49 @@ logging.basicConfig(level=logging.DEBUG, filename="py_log.log", filemode="w",
 
 
 class WebCrawler(abc.ABC):
-    def __init__(self, max_depth, max_urls, start_urls):
+    def __init__(self, session, max_depth, max_urls, start_urls):
+        self.session = session
         self.max_depth = max_depth
         self.max_urls = max_urls
         self.start_urls = set(start_urls)
-        self.data = defaultdict(list)
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
+
+    async def run(self):
+        tasks = []
+        for url in self.start_urls:
+            if self._can_fetch(url):
+                tasks.append(asyncio.create_task(self.start_crawl(url)))
+        await asyncio.gather(*tasks)
+
+    async def start_crawl(self, start_url):
+        visited_url = set()
+        count_url = 1
+        queue = deque()
+        queue.append((0, start_url))
+        while 0 < len(queue) and count_url <= self.max_urls:
+            depth, current_url = queue.popleft()
+            logging.info(current_url)
+            visited_url.add(current_url)
+
+            if depth + 1 > self.max_depth:
+                continue
+
+            try:
+                async with self.session.get(current_url) as response:
+                    html_content = await response.text()
+            except aiohttp.ClientError as e:
+                logging.warning(e)
+                continue
+            await self._process_page(current_url, html_content)
+
+            for url in self._get_links(html_content, current_url):
+                if url not in visited_url:
+                    count_url += 1
+                    queue.append((depth + 1, url))
+
+            await self._make_delay(current_url)
+        logging.info('end')
 
     def _prepare_robot_txt_parsers(self):
         robots = dict()
@@ -30,11 +65,11 @@ class WebCrawler(abc.ABC):
             robots[base_url].read()
         return robots
 
-    def _make_delay(self, url):
+    async def _make_delay(self, url):
         base_url = self._get_base_url(url)
         delay = self._crawl_delays[base_url]
         if delay is not None:
-            time.sleep(delay)
+            await asyncio.sleep(delay)
 
     def _get_base_url(self, url):
         return f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
@@ -50,49 +85,23 @@ class WebCrawler(abc.ABC):
         base_url = self._get_base_url(url)
         return self._robots[base_url].can_fetch('*', url)
 
-    def start_crawl(self):
-        visited_url = set()
-        count_url = 1
-        queue = deque()
-        for url in self.start_urls:
-            if self._can_fetch(url):
-                queue.append((0, url))
-        while 0 < len(queue) and count_url <= self.max_urls:
-            depth, current_url = queue.popleft()
-
-            visited_url.add(current_url)
-            if depth + 1 > self.max_depth:
-                continue
-            try: # TODO: выбросить нормально исключение
-                response = requests.get(current_url)
-            except requests.ConnectionError:
-                continue
-
-            logging.info(current_url)
-            content = response.content
-            self._process_page(current_url, content)
-            for url in self._get_links(content, current_url):
-                if url not in visited_url:
-                    count_url += 1
-                    queue.append((depth + 1, url))
-            self._make_delay(current_url)
-        logging.info('end')
-
     def _get_links(self, content, current_url):
         soup = BeautifulSoup(content, 'html.parser')
         base_url = self._get_base_url(current_url)
         for link_element in soup.select('a[href]'):
             link = urljoin(current_url, link_element['href'])
-            if base_url in link and self._can_fetch(link):
+            logging.info(link)
+            logging.info(base_url)
+            if link.startswith(base_url) and self._can_fetch(link):
                 yield link
 
     @abc.abstractmethod
-    def _unload_data(self, data):
+    async def _unload_data(self, data):
         # Выгружает данные
         pass
 
     @abc.abstractmethod
-    def _process_page(self, url, content):
+    async def _process_page(self, url, content):
         # Обрабатывает страницу
         pass
 
