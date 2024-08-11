@@ -8,17 +8,24 @@ import aiohttp
 from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.DEBUG, filename="py_log.log", filemode="w",
-                    format="%(asctime)s %(levelname)s %(message)s", encoding='utf-8')
+                    format="%(asctime)s %(levelname)s %(message)s",
+                    encoding='utf-8')
 
 
 class WebCrawler(abc.ABC):
-    def __init__(self, session, max_depth, max_urls, start_urls):
-        self.session = session
+    def __init__(self, max_depth, max_urls, start_urls):
         self.max_depth = max_depth
         self.max_urls = max_urls
         self.start_urls = set(start_urls)
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
+
+    async def __aenter__(self):
+        self.session = await aiohttp.ClientSession().__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.session.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self):
         tasks = []

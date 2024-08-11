@@ -9,9 +9,8 @@ import json
 # TODO: оптимизировать, добавить асинхронности
 
 class ImageCrawler(WebCrawler):
-    def __init__(self, session, max_depth, max_urls, start_urls):
-        super().__init__(session=session,
-                         max_depth=max_depth,
+    def __init__(self, max_depth, max_urls, start_urls):
+        super().__init__(max_depth=max_depth,
                          max_urls=max_urls,
                          start_urls=start_urls)
         self.data = defaultdict(list)

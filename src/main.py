@@ -5,11 +5,10 @@ import time
 
 async def main():
     start_time = time.time()
-    async with aiohttp.ClientSession() as session:
-        crawler = ImageCrawler(session=session,
-                               start_urls=["https://www.amazon.com/", "https://ru.wikipedia.org/wiki/Заглавная_страница"],
-                               max_urls=5000,
-                               max_depth=10)
+    async with ImageCrawler(start_urls=["https://www.amazon.com/",
+                                        "https://ru.wikipedia.org/wiki/Заглавная_страница"],
+                            max_urls=5000,
+                            max_depth=10) as crawler:
         await crawler.run()
     print("--- %s seconds ---" % (time.time() - start_time))
 
