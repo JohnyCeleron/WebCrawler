@@ -1,6 +1,7 @@
-import aiohttp, asyncio
-from src.image_crawler import ImageCrawler
+import asyncio
 import time
+
+from src.image_crawler import ImageCrawler
 
 
 async def main():

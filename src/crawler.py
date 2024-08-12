@@ -13,10 +13,11 @@ logging.basicConfig(level=logging.DEBUG, filename="py_log.log", filemode="w",
 
 
 class WebCrawler(abc.ABC):
-    def __init__(self, max_depth, max_urls, start_urls):
+    def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
         self.max_depth = max_depth
         self.max_urls = max_urls
         self.start_urls = set(start_urls)
+        self._check_robots_txt = check_robots_txt
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
 
@@ -64,6 +65,8 @@ class WebCrawler(abc.ABC):
         logging.info('end')
 
     def _prepare_robot_txt_parsers(self):
+        if not self._check_robots_txt:
+            return None
         robots = dict()
         for url in self.start_urls:
             base_url = self._get_base_url(url)
@@ -73,6 +76,8 @@ class WebCrawler(abc.ABC):
         return robots
 
     async def _make_delay(self, url):
+        if not self._check_robots_txt:
+            return
         base_url = self._get_base_url(url)
         delay = self._crawl_delays[base_url]
         if delay is not None:
@@ -82,6 +87,8 @@ class WebCrawler(abc.ABC):
         return f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
 
     def _get_crawl_delays(self):
+        if not self._check_robots_txt:
+            return None
         crawl_delays = dict()
         for url in self.start_urls:
             base_url = self._get_base_url(url)
@@ -89,6 +96,8 @@ class WebCrawler(abc.ABC):
         return crawl_delays
 
     def _can_fetch(self, url):
+        if not self._check_robots_txt:
+            return True
         base_url = self._get_base_url(url)
         return self._robots[base_url].can_fetch('*', url)
 
@@ -117,4 +126,4 @@ if __name__ == '__main__':
     rp = RobotFileParser()
     rp.set_url("https://www.schoolsw3.com/robots.txt")
     rp.read()
-    print(rp.can_fetch('*', 'https://www.schoolsw3.com/images/'))
+    print(rp.crawl_delay('*'))
