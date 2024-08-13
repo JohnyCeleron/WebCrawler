@@ -16,10 +16,37 @@ class WebCrawler(abc.ABC):
     def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
         self.max_depth = max_depth
         self.max_urls = max_urls
-        self.start_urls = set(start_urls)
+        self.start_urls = start_urls
         self._check_robots_txt = check_robots_txt
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
+
+    @property
+    def max_depth(self):
+        return self._max_depth
+
+    @max_depth.setter
+    def max_depth(self, depth):
+        assert depth > 0
+        self._max_depth = depth
+
+    @property
+    def max_urls(self):
+        return self._max_urls
+
+    @max_urls.setter
+    def max_urls(self, count_urls):
+        assert count_urls > 0
+        self._max_urls = count_urls
+
+    @property
+    def start_urls(self):
+        return self._start_urls
+
+    @start_urls.setter
+    def start_urls(self, urls):
+        assert urls is not None
+        self._start_urls = set(urls)
 
     async def __aenter__(self):
         self.session = await aiohttp.ClientSession().__aenter__()
@@ -30,7 +57,7 @@ class WebCrawler(abc.ABC):
 
     async def run(self):
         tasks = []
-        for url in self.start_urls:
+        for url in self._start_urls:
             if self._can_fetch(url):
                 tasks.append(asyncio.create_task(self.start_crawl(url)))
         await asyncio.gather(*tasks)
@@ -40,17 +67,17 @@ class WebCrawler(abc.ABC):
         count_url = 1
         queue = deque()
         queue.append((0, start_url))
-        while 0 < len(queue) and count_url <= self.max_urls:
+        while 0 < len(queue) and count_url <= self._max_urls:
             depth, current_url = queue.popleft()
+            count_url += 1
             logging.info(current_url)
             visited_url.add(current_url)
 
-            if depth + 1 > self.max_depth:
+            if depth + 1 > self._max_depth:
                 continue
 
             try:
-                async with self.session.get(current_url) as response:
-                    html_content = await response.text()
+                html_content = await self.try_get_html_content(current_url)
             except aiohttp.ClientError as e:
                 logging.warning(e)
                 continue
@@ -58,17 +85,21 @@ class WebCrawler(abc.ABC):
 
             for url in self._get_links(html_content, current_url):
                 if url not in visited_url:
-                    count_url += 1
                     queue.append((depth + 1, url))
 
             await self._make_delay(current_url)
         logging.info('end')
 
+    async def try_get_html_content(self, current_url):
+        async with self.session.get(current_url) as response:
+            html_content = await response.text()
+        return html_content
+
     def _prepare_robot_txt_parsers(self):
         if not self._check_robots_txt:
             return None
         robots = dict()
-        for url in self.start_urls:
+        for url in self._start_urls:
             base_url = self._get_base_url(url)
             robots[base_url] = RobotFileParser()
             robots[base_url].set_url(f"{base_url}/robots.txt")
@@ -90,7 +121,7 @@ class WebCrawler(abc.ABC):
         if not self._check_robots_txt:
             return None
         crawl_delays = dict()
-        for url in self.start_urls:
+        for url in self._start_urls:
             base_url = self._get_base_url(url)
             crawl_delays[base_url] = self._robots[base_url].crawl_delay('*')
         return crawl_delays
