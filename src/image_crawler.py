@@ -1,7 +1,7 @@
 from src.crawler import WebCrawler
 from collections import defaultdict
 from bs4 import BeautifulSoup
-import logging
+import asyncio
 from urllib.parse import urljoin
 import json
 
@@ -24,7 +24,8 @@ class ImageCrawler(WebCrawler):
         img_urls = {urljoin(url, item['src'])
                 for item in soup.find_all('img', src=True)
                 if item is not None}
-        self.data[url] = list(img_urls)
+        async with asyncio.Lock():
+            self.data[url] = list(img_urls)
         await self._unload_data(self.data)
 
 

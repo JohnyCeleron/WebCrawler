@@ -20,6 +20,8 @@ class WebCrawler(abc.ABC):
         self._check_robots_txt = check_robots_txt
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
+        self._count_crawled_urls = 0
+        self._visited_url = set()
 
     @property
     def max_depth(self):
@@ -63,15 +65,15 @@ class WebCrawler(abc.ABC):
         await asyncio.gather(*tasks)
 
     async def start_crawl(self, start_url):
-        visited_url = set()
-        count_url = 1
         queue = deque()
         queue.append((0, start_url))
-        while 0 < len(queue) and count_url <= self._max_urls:
+        while 0 < len(queue) and self._count_crawled_urls <= self._max_urls:
             depth, current_url = queue.popleft()
-            count_url += 1
-            logging.info(current_url)
-            visited_url.add(current_url)
+            async with asyncio.Lock():
+                self._count_crawled_urls += 1
+                logging.info(current_url)
+                logging.info(self._count_crawled_urls)
+                self._visited_url.add(current_url)
 
             if depth + 1 > self._max_depth:
                 continue
@@ -84,8 +86,9 @@ class WebCrawler(abc.ABC):
             await self._process_page(current_url, html_content)
 
             for url in self._get_links(html_content, current_url):
-                if url not in visited_url:
-                    queue.append((depth + 1, url))
+                async with asyncio.Lock():
+                    if url not in self._visited_url:
+                        queue.append((depth + 1, url))
 
             await self._make_delay(current_url)
         logging.info('end')
@@ -137,8 +140,8 @@ class WebCrawler(abc.ABC):
         base_url = self._get_base_url(current_url)
         for link_element in soup.select('a[href]'):
             link = urljoin(current_url, link_element['href'])
-            logging.info(link)
-            logging.info(base_url)
+            #logging.info(link)
+            #logging.info(base_url)
             if link.startswith(base_url) and self._can_fetch(link):
                 yield link
 
