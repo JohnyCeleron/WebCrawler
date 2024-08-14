@@ -7,7 +7,7 @@ from urllib.robotparser import RobotFileParser
 import aiohttp
 from bs4 import BeautifulSoup
 
-logging.basicConfig(level=logging.DEBUG, filename="py_log.log", filemode="w",
+logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="w",
                     format="%(asctime)s %(levelname)s %(message)s",
                     encoding='utf-8')
 
