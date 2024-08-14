@@ -198,5 +198,9 @@ TEST_RESPONSE = {
     "https://www.base_url.org/bar2": {
         "status": 200,
         "html_content": HTML_BAR2
+    },
+    "https://www.other_url.org/": {
+        "status": 200,
+        "html_content": HTML_WITH_OTHER_URL
     }
 }

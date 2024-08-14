@@ -41,6 +41,7 @@ class TestLinks:
 
 class TestCrawler:
     BASE_URL = 'https://www.base_url.org/'
+    OTHER_URL = 'https://www.other_url.org/'
 
     @pytest.mark.parametrize("max_depth,max_urls, start_urls", [
         (-1, 5, [BASE_URL]),
@@ -58,7 +59,8 @@ class TestCrawler:
         "max_depth, max_urls, start_urls, expected_crawled_urls", [
             (1, 1, [BASE_URL], ["https://www.base_url.org/"]),
             (2, 2, [BASE_URL], ["https://www.base_url.org/", "https://www.base_url.org/foo1"]),
-            (2, 1, [BASE_URL], ["https://www.base_url.org/"])
+            (2, 1, [BASE_URL], ["https://www.base_url.org/"]),
+            (2, 2, [], [])
         ])
     @pytest.mark.asyncio
     async def test_crawler_without_robots_txt(self, max_depth, max_urls,
