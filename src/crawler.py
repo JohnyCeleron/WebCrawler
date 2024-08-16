@@ -51,7 +51,7 @@ class WebCrawler(abc.ABC):
         self._start_urls = set(urls)
 
     async def __aenter__(self):
-        self.session = await aiohttp.ClientSession().__aenter__()
+        self.session = await aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=300)).__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -67,7 +67,7 @@ class WebCrawler(abc.ABC):
     async def start_crawl(self, start_url):
         queue = deque()
         queue.append((0, start_url))
-        while 0 < len(queue) and self._count_crawled_urls <= self._max_urls:
+        while 0 < len(queue) and self._count_crawled_urls < self._max_urls:
             depth, current_url = queue.popleft()
             async with asyncio.Lock():
                 self._count_crawled_urls += 1
@@ -136,7 +136,7 @@ class WebCrawler(abc.ABC):
         return self._robots[base_url].can_fetch('*', url)
 
     def _get_links(self, content, current_url):
-        soup = BeautifulSoup(content, 'html.parser')
+        soup = BeautifulSoup(content, 'lxml')
         base_url = self._get_base_url(current_url)
         for link_element in soup.select('a[href]'):
             link = urljoin(current_url, link_element['href'])
