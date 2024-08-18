@@ -1,15 +1,8 @@
 import aiohttp
 import pytest
-from src.crawler import WebCrawler
+
 import html_constants
-
-
-class DefaultCrawler(WebCrawler):
-    async def _process_page(self, url, content):
-        pass
-
-    async def _unload_data(self, data):
-        pass
+from src.default_crawler import DefaultCrawler
 
 
 class TestLinks:
@@ -77,7 +70,7 @@ class TestCrawler:
                 raise aiohttp.ClientError()
             return html_content
 
-        monkeypatch.setattr("src.crawler.WebCrawler.try_get_html_content",
+        monkeypatch.setattr("crawler.WebCrawler._get_html_content",
                             mock_get_html_content, raising=True)
         async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
                                   start_urls=start_urls, check_robots_txt=False) as crawler:

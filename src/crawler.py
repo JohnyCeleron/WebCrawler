@@ -1,11 +1,15 @@
 import abc
 import asyncio
 import logging
+import urllib.error
+import aiohttp
+import colorama
+
 from collections import deque
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
-import aiohttp
 from bs4 import BeautifulSoup
+
 
 logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="w",
                     format="%(asctime)s %(levelname)s %(message)s",
@@ -51,7 +55,8 @@ class WebCrawler(abc.ABC):
         self._start_urls = set(urls)
 
     async def __aenter__(self):
-        self.session = await aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=300)).__aenter__()
+        connector = aiohttp.TCPConnector(limit=200)
+        self.session = await aiohttp.ClientSession(connector=connector).__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -69,20 +74,23 @@ class WebCrawler(abc.ABC):
         queue.append((0, start_url))
         while 0 < len(queue) and self._count_crawled_urls < self._max_urls:
             depth, current_url = queue.popleft()
-            async with asyncio.Lock():
-                self._count_crawled_urls += 1
-                logging.info(current_url)
-                logging.info(self._count_crawled_urls)
-                self._visited_url.add(current_url)
 
             if depth + 1 > self._max_depth:
                 continue
 
-            try:
-                html_content = await self.try_get_html_content(current_url)
-            except aiohttp.ClientError as e:
-                logging.warning(e)
-                continue
+            async with asyncio.Lock():
+                try:
+                    html_content = await self._get_html_content(current_url)
+                except aiohttp.ClientError as e:
+                    logging.warning(e)
+                    print(f'{colorama.Fore.YELLOW}WARNING: Could not get the '
+                          f'html code for {current_url}')
+                    continue
+                finally:
+                    self._count_crawled_urls += 1
+                    logging.info(f'{self._count_crawled_urls} {current_url}')
+                    self._visited_url.add(current_url)
+                    print(f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
             await self._process_page(current_url, html_content)
 
             for url in self._get_links(html_content, current_url):
@@ -91,9 +99,10 @@ class WebCrawler(abc.ABC):
                         queue.append((depth + 1, url))
 
             await self._make_delay(current_url)
+        print(colorama.Style.RESET_ALL)
         logging.info('end')
 
-    async def try_get_html_content(self, current_url):
+    async def _get_html_content(self, current_url):
         async with self.session.get(current_url) as response:
             html_content = await response.text()
         return html_content
@@ -103,10 +112,14 @@ class WebCrawler(abc.ABC):
             return None
         robots = dict()
         for url in self._start_urls:
-            base_url = self._get_base_url(url)
-            robots[base_url] = RobotFileParser()
-            robots[base_url].set_url(f"{base_url}/robots.txt")
-            robots[base_url].read()
+            try:
+                base_url = self._get_base_url(url)
+                robots[base_url] = RobotFileParser()
+                robots[base_url].set_url(f"{base_url}/robots.txt")
+                robots[base_url].read()
+            except urllib.error.URLError:
+                print(f'{colorama.Fore.RED}Could not get data from robots.txt{colorama.Style.RESET_ALL}')
+                exit()
         return robots
 
     async def _make_delay(self, url):
@@ -140,8 +153,6 @@ class WebCrawler(abc.ABC):
         base_url = self._get_base_url(current_url)
         for link_element in soup.select('a[href]'):
             link = urljoin(current_url, link_element['href'])
-            #logging.info(link)
-            #logging.info(base_url)
             if link.startswith(base_url) and self._can_fetch(link):
                 yield link
 
@@ -154,10 +165,3 @@ class WebCrawler(abc.ABC):
     async def _process_page(self, url, content):
         # Обрабатывает страницу
         pass
-
-
-if __name__ == '__main__':
-    rp = RobotFileParser()
-    rp.set_url("https://www.schoolsw3.com/robots.txt")
-    rp.read()
-    print(rp.crawl_delay('*'))

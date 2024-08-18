@@ -1,23 +1,24 @@
-from src.crawler import WebCrawler
-from collections import defaultdict
-from bs4 import BeautifulSoup
 import asyncio
-from urllib.parse import urljoin
 import json
-from lxml import etree
+import os
+from collections import defaultdict
+from urllib.parse import urljoin
 
+from bs4 import BeautifulSoup
 
-# TODO: оптимизировать, добавить асинхронности
+from crawler import WebCrawler
+
 
 class ImageCrawler(WebCrawler):
-    def __init__(self, max_depth, max_urls, start_urls):
+    def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
         super().__init__(max_depth=max_depth,
                          max_urls=max_urls,
-                         start_urls=start_urls)
+                         start_urls=start_urls,
+                         check_robots_txt=check_robots_txt)
         self.data = defaultdict(list)
 
     async def _unload_data(self, data):
-        with open('image_data.json', 'w') as f:
+        with open(f'{os.getcwd()}/image_data.json', 'w') as f:
             json.dump(data, f, indent=4)
 
     async def _process_page(self, url, content):
@@ -28,14 +29,3 @@ class ImageCrawler(WebCrawler):
         async with asyncio.Lock():
             self.data[url] = list(img_urls)
         await self._unload_data(self.data)
-
-
-if __name__ == '__main__':
-    import time
-
-    # start_time = time.time()
-    # crawler = ImageCrawler(start_urls=["https://www.amazon.com/"],
-    #                       max_urls=1000,
-    #                       max_depth=10)
-    # crawler.start_crawl()
-    # print("--- %s seconds ---" % (time.time() - start_time))
