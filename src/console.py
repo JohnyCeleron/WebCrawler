@@ -1,6 +1,8 @@
 import argparse
 import asyncio
 import time
+
+import colorama
 from colorama import Style, Fore
 
 from default_crawler import DefaultCrawler
@@ -49,12 +51,18 @@ def main():
         "image": ImageCrawler
     }
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(run(
-        crawler[args.mode](start_urls=args.start_urls,
-                           max_urls=args.max_urls,
-                           max_depth=args.max_depth)
-        ))
+    try:
+        crawler = crawler[args.mode](start_urls=args.start_urls,
+                               max_urls=args.max_urls,
+                               max_depth=args.max_depth)
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(run(crawler))
+    except AssertionError as e:
+        print(f'{colorama.Fore.YELLOW}{e}')
+        exit()
+    finally:
+        print(colorama.Style.RESET_ALL)
+
 
 
 if __name__ == "__main__":

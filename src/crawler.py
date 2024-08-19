@@ -2,19 +2,24 @@ import abc
 import asyncio
 import logging
 import urllib.error
-import aiohttp
-import colorama
-
-from collections import deque
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
-from bs4 import BeautifulSoup
+from collections import deque
 
+import aiohttp
+import colorama
+from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="w",
                     format="%(asctime)s %(levelname)s %(message)s",
                     encoding='utf-8')
 
+
+# TODO: попробовать написать реализацию паттерна producer-consumer
+
+LOCK1 = asyncio.Lock()
+LOCK2 = asyncio.Lock()
+LOCK3 = asyncio.Lock()
 
 class WebCrawler(abc.ABC):
     def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
@@ -33,7 +38,8 @@ class WebCrawler(abc.ABC):
 
     @max_depth.setter
     def max_depth(self, depth):
-        assert depth > 0
+        if depth <= 0:
+            raise AssertionError('Max depth must be positive')
         self._max_depth = depth
 
     @property
@@ -42,7 +48,8 @@ class WebCrawler(abc.ABC):
 
     @max_urls.setter
     def max_urls(self, count_urls):
-        assert count_urls > 0
+        if count_urls <= 0:
+            raise AssertionError('Max urls must be positive')
         self._max_urls = count_urls
 
     @property
@@ -51,56 +58,78 @@ class WebCrawler(abc.ABC):
 
     @start_urls.setter
     def start_urls(self, urls):
-        assert urls is not None
+        if urls is None:
+            raise AssertionError('Start urls must not be None')
+        if len(urls) == 0:
+            raise AssertionError('Count start urls must be positive')
         self._start_urls = set(urls)
 
     async def __aenter__(self):
         connector = aiohttp.TCPConnector(limit=200)
-        self.session = await aiohttp.ClientSession(connector=connector).__aenter__()
+        self.session = await aiohttp.ClientSession(
+            connector=connector).__aenter__()
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.session.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self):
-        tasks = []
-        for url in self._start_urls:
-            if self._can_fetch(url):
-                tasks.append(asyncio.create_task(self.start_crawl(url)))
-        await asyncio.gather(*tasks)
+        queue_process_page = asyncio.Queue()
+        producers = [asyncio.create_task(self.start_crawl(url, queue_process_page))
+                     for url in self._start_urls]
+        consumers = [asyncio.create_task(self._process_page(queue_process_page))
+                    for _ in range(3)]
 
-    async def start_crawl(self, start_url):
+        await asyncio.gather(*producers)
+        await queue_process_page.join()
+        for consumer in consumers:
+            consumer.cancel()
+        logging.info('end')
+
+    async def start_crawl(self, start_url, queue_process_page):
         queue = deque()
         queue.append((0, start_url))
-        while 0 < len(queue) and self._count_crawled_urls < self._max_urls:
+        self._visited_url.add(start_url)
+
+        while True:
+            async with LOCK1:  # TODO: написать норм lock
+                if self._count_crawled_urls >= self._max_urls or len(queue) == 0:
+                    break
             depth, current_url = queue.popleft()
 
             if depth + 1 > self._max_depth:
                 continue
 
-            async with asyncio.Lock():
+            async with LOCK1:  # TODO: написать норм lock
+                self._count_crawled_urls += 1
                 try:
                     html_content = await self._get_html_content(current_url)
-                except aiohttp.ClientError as e:
-                    logging.warning(e)
+                except aiohttp.ClientError:
                     print(f'{colorama.Fore.YELLOW}WARNING: Could not get the '
                           f'html code for {current_url}')
                     continue
-                finally:
-                    self._count_crawled_urls += 1
-                    logging.info(f'{self._count_crawled_urls} {current_url}')
-                    self._visited_url.add(current_url)
-                    print(f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
-            await self._process_page(current_url, html_content)
+                logging.info(f'{self._count_crawled_urls} {current_url}')
+                print(
+                    f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
 
+            await queue_process_page.put((current_url, html_content))
+            await self._queue_crawl_page_put(current_url, depth, html_content,
+                                             queue)
+            await self._make_delay(start_url)
+
+    async def _queue_crawl_page_put(self, current_url, depth, html_content,
+                                    queue_crawl_page):
+        async with LOCK1:
+            MAX_NEXT_URLS = 10
+            next_url_count = 1
             for url in self._get_links(html_content, current_url):
-                async with asyncio.Lock():
-                    if url not in self._visited_url:
-                        queue.append((depth + 1, url))
-
-            await self._make_delay(current_url)
-        print(colorama.Style.RESET_ALL)
-        logging.info('end')
+                if len(queue_crawl_page) + self._count_crawled_urls >= self._max_urls\
+                        or next_url_count > MAX_NEXT_URLS:
+                    break
+                if url not in self._visited_url:
+                    next_url_count += 1
+                    self._visited_url.add(url)
+                    queue_crawl_page.append((depth + 1, url))
 
     async def _get_html_content(self, current_url):
         async with self.session.get(current_url) as response:
@@ -118,7 +147,8 @@ class WebCrawler(abc.ABC):
                 robots[base_url].set_url(f"{base_url}/robots.txt")
                 robots[base_url].read()
             except urllib.error.URLError:
-                print(f'{colorama.Fore.RED}Could not get data from robots.txt{colorama.Style.RESET_ALL}')
+                print(
+                    f'{colorama.Fore.RED}Could not get data from robots.txt{colorama.Style.RESET_ALL}')
                 exit()
         return robots
 
@@ -162,6 +192,6 @@ class WebCrawler(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def _process_page(self, url, content):
+    async def _process_page(self, queue):
         # Обрабатывает страницу
         pass

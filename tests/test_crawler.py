@@ -5,6 +5,8 @@ import html_constants
 from src.default_crawler import DefaultCrawler
 
 
+#TODO:написать тесты для image crawler
+
 class TestLinks:
     BASE_URL = 'https://www.base_url.org/'
 
@@ -41,7 +43,8 @@ class TestCrawler:
         (0, 5, [BASE_URL]),
         (1, 0, [BASE_URL]),
         (1, -1, [BASE_URL]),
-        (1, 1, None)
+        (1, 1, None),
+        (1, 1, [])
     ])
     def test_invalid_data(self, max_depth, max_urls, start_urls):
         with pytest.raises(AssertionError):
@@ -53,12 +56,12 @@ class TestCrawler:
             (1, 1, [BASE_URL], 1),
             (2, 2, [BASE_URL], 2),
             (2, 1, [BASE_URL], 1),
-            (2, 2, [], 0),
             (2, 10, [BASE_URL, OTHER_URL], 8)
         ])
     @pytest.mark.asyncio
     async def test_crawler_without_robots_txt(self, max_depth, max_urls,
-                                              start_urls, expected_count_crawled_urls,
+                                              start_urls,
+                                              expected_count_crawled_urls,
                                               monkeypatch):
         count_crawled_urls = 0
 
@@ -73,6 +76,7 @@ class TestCrawler:
         monkeypatch.setattr("crawler.WebCrawler._get_html_content",
                             mock_get_html_content, raising=True)
         async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
-                                  start_urls=start_urls, check_robots_txt=False) as crawler:
+                                  start_urls=start_urls,
+                                  check_robots_txt=False) as crawler:
             await crawler.run()
         assert count_crawled_urls == expected_count_crawled_urls
