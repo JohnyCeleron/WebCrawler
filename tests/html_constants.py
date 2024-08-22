@@ -59,10 +59,12 @@ HTML_WITH_OTHER_URL = f"""
 <html>
   <body>
     <a href="https://www.other.org/foo1">
+        <img src="image_other1.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
     <a href="https://www.other.org/foo2">
+        <img src="image_other2.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
@@ -75,6 +77,7 @@ HTML_WITH_OTHER_URL = f"""
     </a>
     <br />
     <a href="https://www.other.org/foo5">
+        <img src="image_other5.jpg" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
@@ -115,10 +118,12 @@ HTML_FOO1 = f"""
 <html>
   <body>
     <a href="https://www.base_url.org/bar1">
+        <img src="image1.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
     <a href="https://www.base_url.org/bar2">
+        <img src="image2.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
@@ -202,5 +207,9 @@ TEST_RESPONSE = {
     "https://www.other_url.org/": {
         "status": 200,
         "html_content": HTML_WITH_OTHER_URL
+    },
+    "https://www.image_url.org/": {
+        "status": 200,
+        "html_content": HTML_WITH_IMG
     }
 }

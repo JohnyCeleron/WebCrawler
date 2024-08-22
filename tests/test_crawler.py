@@ -37,6 +37,7 @@ class TestLinks:
 class TestCrawler:
     BASE_URL = 'https://www.base_url.org/'
     OTHER_URL = 'https://www.other_url.org/'
+    IMG_URL = "https://www.image_url.org/"
 
     @pytest.mark.parametrize("max_depth,max_urls, start_urls", [
         (-1, 5, [BASE_URL]),
@@ -56,7 +57,8 @@ class TestCrawler:
             (1, 1, [BASE_URL], 1),
             (2, 2, [BASE_URL], 2),
             (2, 1, [BASE_URL], 1),
-            (2, 10, [BASE_URL, OTHER_URL], 8)
+            (2, 10, [BASE_URL, OTHER_URL], 8),
+            (2, 1, [BASE_URL, OTHER_URL, IMG_URL], 1)
         ])
     @pytest.mark.asyncio
     async def test_crawler_without_robots_txt(self, max_depth, max_urls,
@@ -68,6 +70,8 @@ class TestCrawler:
         async def mock_get_html_content(_, url):
             nonlocal count_crawled_urls
             count_crawled_urls += 1
+            if url not in html_constants.TEST_RESPONSE:
+                raise aiohttp.ClientError()
             html_content = html_constants.TEST_RESPONSE[url]["html_content"]
             if html_content == 'error':
                 raise aiohttp.ClientError()
@@ -76,7 +80,6 @@ class TestCrawler:
         monkeypatch.setattr("crawler.WebCrawler._get_html_content",
                             mock_get_html_content, raising=True)
         async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
-                                  start_urls=start_urls,
-                                  check_robots_txt=False) as crawler:
+                                  start_urls=start_urls, check_robots_txt=False) as crawler:
             await crawler.run()
         assert count_crawled_urls == expected_count_crawled_urls

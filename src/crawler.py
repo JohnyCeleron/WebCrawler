@@ -2,6 +2,7 @@ import abc
 import asyncio
 import logging
 import urllib.error
+
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
 from collections import deque
@@ -15,11 +16,8 @@ logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="w",
                     encoding='utf-8')
 
 
-# TODO: попробовать написать реализацию паттерна producer-consumer
+CRAWLER_LOCK = asyncio.Lock()
 
-LOCK1 = asyncio.Lock()
-LOCK2 = asyncio.Lock()
-LOCK3 = asyncio.Lock()
 
 class WebCrawler(abc.ABC):
     def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
@@ -30,6 +28,7 @@ class WebCrawler(abc.ABC):
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
         self._count_crawled_urls = 0
+        self._count_url_in_queues = 0
         self._visited_url = set()
 
     @property
@@ -76,8 +75,8 @@ class WebCrawler(abc.ABC):
     async def run(self):
         queue_process_page = asyncio.Queue()
         producers = [asyncio.create_task(self.start_crawl(url, queue_process_page))
-                     for url in self._start_urls]
-        consumers = [asyncio.create_task(self._process_page(queue_process_page))
+                     for count, url in enumerate(self._start_urls) if count < self._max_urls]
+        consumers = [asyncio.create_task(self._get_consumer_task(queue_process_page))
                     for _ in range(3)]
 
         await asyncio.gather(*producers)
@@ -87,20 +86,21 @@ class WebCrawler(abc.ABC):
         logging.info('end')
 
     async def start_crawl(self, start_url, queue_process_page):
-        queue = deque()
-        queue.append((0, start_url))
-        self._visited_url.add(start_url)
+        async with CRAWLER_LOCK:
+            queue = deque()
+            queue.append((0, start_url))
+            self._count_url_in_queues += 1
+            self._visited_url.add(start_url)
 
-        while True:
-            async with LOCK1:  # TODO: написать норм lock
-                if self._count_crawled_urls >= self._max_urls or len(queue) == 0:
-                    break
+        while len(queue) > 0:
             depth, current_url = queue.popleft()
+            async with CRAWLER_LOCK:
+                self._count_url_in_queues -= 1
 
             if depth + 1 > self._max_depth:
                 continue
 
-            async with LOCK1:  # TODO: написать норм lock
+            async with CRAWLER_LOCK:
                 self._count_crawled_urls += 1
                 try:
                     html_content = await self._get_html_content(current_url)
@@ -113,23 +113,29 @@ class WebCrawler(abc.ABC):
                     f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
 
             await queue_process_page.put((current_url, html_content))
-            await self._queue_crawl_page_put(current_url, depth, html_content,
-                                             queue)
+            await self._queue_crawl_page_put(current_url, depth, html_content, queue)
             await self._make_delay(start_url)
 
     async def _queue_crawl_page_put(self, current_url, depth, html_content,
                                     queue_crawl_page):
-        async with LOCK1:
+        async with CRAWLER_LOCK:
             MAX_NEXT_URLS = 10
             next_url_count = 1
             for url in self._get_links(html_content, current_url):
-                if len(queue_crawl_page) + self._count_crawled_urls >= self._max_urls\
+                if self._count_url_in_queues + self._count_crawled_urls >= self._max_urls\
                         or next_url_count > MAX_NEXT_URLS:
                     break
                 if url not in self._visited_url:
                     next_url_count += 1
                     self._visited_url.add(url)
+                    self._count_url_in_queues += 1
                     queue_crawl_page.append((depth + 1, url))
+
+    async def _get_consumer_task(self, queue):
+        while True:
+            url, content = await queue.get()
+            await self._process_page(url, content)
+            queue.task_done()
 
     async def _get_html_content(self, current_url):
         async with self.session.get(current_url) as response:
@@ -192,6 +198,6 @@ class WebCrawler(abc.ABC):
         pass
 
     @abc.abstractmethod
-    async def _process_page(self, queue):
+    async def _process_page(self, url, html_content):
         # Обрабатывает страницу
         pass
