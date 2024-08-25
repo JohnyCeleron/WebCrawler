@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from crawler import WebCrawler
+from src.crawler import WebCrawler
 
 DATA_LOCK = asyncio.Lock()
 

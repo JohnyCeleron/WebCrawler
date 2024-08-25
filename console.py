@@ -4,9 +4,8 @@ import time
 
 import colorama
 from colorama import Style, Fore
-
-from default_crawler import DefaultCrawler
-from image_crawler import ImageCrawler
+from src.default_crawler import DefaultCrawler
+from src.image_crawler import ImageCrawler
 
 DEFAULT_MAX_URLS = 100
 DEFAULT_MAX_DEPTH = 5
@@ -21,16 +20,14 @@ async def run(crawler):
     print("--- %s seconds ---" % (time.time() - start_time))
 
 
-def main():
+def _get_parser():
     # Создаем парсер
     parser = argparse.ArgumentParser(description="Свой краулер",
                                      formatter_class=argparse.RawTextHelpFormatter)
-
     MODE_DESCRIPTION = {
         'default': "Краулер просто проходит по url ссылкам и ничего больше не делает",
         'image': "Краулер с url ссылок выкачивает ссылки на картинки"
     }
-
     # Добавляем аргументы
     parser.add_argument("start_urls", type=str, nargs='+',
                         help="URL, с которых будет происходить обход")
@@ -42,8 +39,12 @@ def main():
                         help="Максимальное количество url, которое может обойти краулер")
     parser.add_argument("--max_depth", type=int, default=DEFAULT_MAX_DEPTH,
                         help="Максимальная глубина обхода")
+    return parser
 
-    # Разбираем аргументы
+
+def main():
+    parser = _get_parser()
+
     args = parser.parse_args()
 
     crawler = {
@@ -62,7 +63,6 @@ def main():
         exit()
     finally:
         print(colorama.Style.RESET_ALL)
-
 
 
 if __name__ == "__main__":

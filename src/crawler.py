@@ -1,20 +1,13 @@
 import abc
 import asyncio
-import logging
 import urllib.error
-
+from collections import deque
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
-from collections import deque
 
 import aiohttp
 import colorama
 from bs4 import BeautifulSoup
-
-logging.basicConfig(level=logging.INFO, filename="py_log.log", filemode="w",
-                    format="%(asctime)s %(levelname)s %(message)s",
-                    encoding='utf-8')
-
 
 CRAWLER_LOCK = asyncio.Lock()
 
@@ -83,7 +76,6 @@ class WebCrawler(abc.ABC):
         await queue_process_page.join()
         for consumer in consumers:
             consumer.cancel()
-        logging.info('end')
 
     async def start_crawl(self, start_url, queue_process_page):
         async with CRAWLER_LOCK:
@@ -108,9 +100,7 @@ class WebCrawler(abc.ABC):
                     print(f'{colorama.Fore.YELLOW}WARNING: Could not get the '
                           f'html code for {current_url}')
                     continue
-                logging.info(f'{self._count_crawled_urls} {current_url}')
-                print(
-                    f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
+                print(f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
 
             await queue_process_page.put((current_url, html_content))
             await self._queue_crawl_page_put(current_url, depth, html_content, queue)

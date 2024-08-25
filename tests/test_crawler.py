@@ -1,7 +1,7 @@
 import aiohttp
 import pytest
 
-import html_constants
+import tests.html_constants as html_constants
 from src.default_crawler import DefaultCrawler
 
 
@@ -77,7 +77,7 @@ class TestCrawler:
                 raise aiohttp.ClientError()
             return html_content
 
-        monkeypatch.setattr("crawler.WebCrawler._get_html_content",
+        monkeypatch.setattr("src.crawler.WebCrawler._get_html_content",
                             mock_get_html_content, raising=True)
         async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
                                   start_urls=start_urls, check_robots_txt=False) as crawler:

@@ -1,4 +1,4 @@
-from crawler import WebCrawler
+from src.crawler import WebCrawler
 
 
 class DefaultCrawler(WebCrawler):

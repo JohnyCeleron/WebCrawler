@@ -3,7 +3,7 @@ import json
 import aiohttp
 import pytest
 import os
-import html_constants
+import tests.html_constants as html_constants
 
 from src.image_crawler import ImageCrawler
 
@@ -78,7 +78,7 @@ class TestCrawlerImages:
                 raise aiohttp.ClientError()
             return html_content
 
-        monkeypatch.setattr("crawler.WebCrawler._get_html_content",
+        monkeypatch.setattr("src.crawler.WebCrawler._get_html_content",
                             mock_get_html_content, raising=True)
         async with ImageCrawler(max_depth=max_depth, max_urls=max_urls,
                                 start_urls=start_urls,
