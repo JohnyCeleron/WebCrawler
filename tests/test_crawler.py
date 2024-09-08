@@ -5,8 +5,6 @@ import tests.html_constants as html_constants
 from src.default_crawler import DefaultCrawler
 
 
-#TODO:написать тесты для image crawler
-
 class TestLinks:
     BASE_URL = 'https://www.base_url.org/'
 
