@@ -12,12 +12,11 @@ DEFAULT_MAX_DEPTH = 5
 
 
 async def run(crawler):
-    start_time = time.time()
     print(f"{Style.BRIGHT}{Fore.LIGHTGREEN_EX}Start{Style.RESET_ALL}")
     async with crawler:
         await crawler.run()
     print(f"{Style.BRIGHT}{Fore.LIGHTGREEN_EX}End{Style.RESET_ALL}")
-    print("--- %s seconds ---" % (time.time() - start_time))
+
 
 
 def _get_parser():

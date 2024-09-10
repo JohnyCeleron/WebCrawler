@@ -36,7 +36,6 @@ class TestCrawler:
     BASE_URL = 'https://www.base_url.org/'
     OTHER_URL = 'https://www.other_url.org/'
     IMG_URL = "https://www.image_url.org/"
-
     @pytest.mark.parametrize("max_depth,max_urls, start_urls", [
         (-1, 5, [BASE_URL]),
         (0, 5, [BASE_URL]),

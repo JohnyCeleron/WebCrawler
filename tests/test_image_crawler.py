@@ -86,7 +86,6 @@ class TestCrawlerImages:
             await crawler.run()
         self._check_only_image()
 
-
     def _check_only_image(self):
         assert os.path.exists('image_data.json')
         IMG_FORMAT = {'.png', '.jpg'}
