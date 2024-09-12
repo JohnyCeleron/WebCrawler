@@ -1,9 +1,11 @@
 import abc
 import asyncio
 import os
+import pickle
 import urllib.error
 import json
 import hashlib
+from src.enums import ActionQueuePickle, InitType, FileType
 from collections import deque
 from urllib.parse import urljoin, urlparse
 from urllib.robotparser import RobotFileParser
@@ -13,9 +15,12 @@ import colorama
 from bs4 import BeautifulSoup
 
 CRAWLER_LOCK = asyncio.Lock()
+URLS_IN_QUEUE_LOCK = asyncio.Lock()
+
 MAX_SIZE_QUEUE = 20
 HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
-ADJESENT_EDGES_URL = 'adjesent_edges_url.json'  # json, который понадобится для того, чтобы граф сделать
+ADJESENT_EDGES_URL = 'adjesent_edges_url.pickle'  # pickle, который понадобится для того, чтобы граф сделать
+URLS_IN_QUEUE = 'urls_in_queue.pickle' #будет хранить информацию о текущих url в очередях
 
 
 class WebCrawler(abc.ABC):
@@ -30,10 +35,11 @@ class WebCrawler(abc.ABC):
         self._count_url_in_queues = 0
         self._visited_url = set()
 
-        self._initialize_json_file(HASHED_URL_JSON)
+        self._initialize_file(HASHED_URL_JSON, FileType.JSON, InitType.DICT)
         if os.path.exists(os.path.join(os.getcwd(), ADJESENT_EDGES_URL)):
             os.remove(os.path.join(os.getcwd(), ADJESENT_EDGES_URL))
-        self._initialize_json_file(ADJESENT_EDGES_URL)
+        self._initialize_file(ADJESENT_EDGES_URL, FileType.PICKLE, InitType.LIST)
+        self._initialize_file(URLS_IN_QUEUE, FileType.PICKLE, InitType.SET)
 
     @property
     def max_depth(self):
@@ -96,47 +102,17 @@ class WebCrawler(abc.ABC):
         for consumer in consumers:
             consumer.cancel()
 
-    @staticmethod
-    def _check_update(url, content):
-        # Проверяет, что url обновилась
-        path = os.path.join(os.getcwd(), HASHED_URL_JSON)
-        with open(path, 'r') as f:
-            hash_urls = json.load(f)
-        if url not in hash_urls:
-            return True
-        old_hash = hash_urls[url]
-        new_hash = hashlib.sha256(content.encode()).hexdigest()
-        return old_hash != new_hash  # При проверке мы пренебрегаем коллизиями
-
-    @staticmethod
-    def _hash_url(url, content):
-        path = os.path.join(os.getcwd(), HASHED_URL_JSON)
-        with open(path, 'r') as f:
-            hash_urls = json.load(f)
-        hash_urls[url] = hashlib.sha256(content.encode()).hexdigest()
-        with open(path, 'w') as f:
-            json.dump(hash_urls, f, indent=4)
-
-    @staticmethod
-    def _add_edge(start, end):
-        path = os.path.join(os.getcwd(), ADJESENT_EDGES_URL)
-        with open(path, 'r') as f:
-            edges = json.load(f)
-        if start not in edges:
-            edges[start] = []
-        edges[start].append(end)
-        with open(path, 'w') as f:
-            json.dump(edges, f, indent=4)
-
     async def start_crawl(self, start_url, queue_process_page):
         async with CRAWLER_LOCK:
             queue = deque()
             queue.append((0, start_url, None))
+            await self._do_action_with_queue_pickle(start_url, ActionQueuePickle.ADD)
             self._count_url_in_queues += 1
             self._visited_url.add(start_url)
 
         while len(queue) > 0:
             depth, current_url, previous_url = queue.popleft()
+            await self._do_action_with_queue_pickle(current_url, ActionQueuePickle.REMOVE)
             async with CRAWLER_LOCK:
                 self._count_url_in_queues -= 1
 
@@ -167,7 +143,7 @@ class WebCrawler(abc.ABC):
     async def _queue_crawl_page_put(self, current_url, depth, html_content,
                                     queue_crawl_page):
         async with CRAWLER_LOCK:
-            MAX_NEXT_URLS = 10
+            MAX_NEXT_URLS = 5
             next_url_count = 1
             for url in self._get_links(html_content, current_url):
                 if self._count_url_in_queues + self._count_crawled_urls >= self._max_urls \
@@ -176,6 +152,7 @@ class WebCrawler(abc.ABC):
                 if url not in self._visited_url:
                     next_url_count += 1
                     self._visited_url.add(url)
+                    await self._do_action_with_queue_pickle(url, ActionQueuePickle.ADD)
                     self._count_url_in_queues += 1
                     queue_crawl_page.append((depth + 1, url, current_url))
 
@@ -217,10 +194,6 @@ class WebCrawler(abc.ABC):
         if delay is not None:
             await asyncio.sleep(delay)
 
-    @staticmethod
-    def _get_base_url(url):
-        return f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
-
     def _get_crawl_delays(self):
         if not self._check_robots_txt:
             return None
@@ -236,13 +209,6 @@ class WebCrawler(abc.ABC):
         base_url = self._get_base_url(url)
         return self._robots[base_url].can_fetch('*', url)
 
-    @staticmethod
-    def _initialize_json_file(file_name):
-        path = os.path.join(os.getcwd(), file_name)
-        if not os.path.exists(path):
-            with open(path, 'w+') as f:
-                json.dump(dict(), f, indent=4)
-
     def _get_links(self, content, current_url):
         soup = BeautifulSoup(content, 'lxml')
         base_url = self._get_base_url(current_url)
@@ -250,6 +216,72 @@ class WebCrawler(abc.ABC):
             link = urljoin(current_url, link_element['href'])
             if link.startswith(base_url) and self._can_fetch(link):
                 yield link
+
+    @staticmethod
+    async def _do_action_with_queue_pickle(url, action):
+        async with URLS_IN_QUEUE_LOCK:
+            with open(URLS_IN_QUEUE, 'rb') as f:
+                data = pickle.load(f)
+            if action == ActionQueuePickle.ADD:
+                data.add(url)
+            elif action == ActionQueuePickle.REMOVE:
+                data.remove(url)
+            with open(URLS_IN_QUEUE, 'wb') as f:
+                pickle.dump(data, f)
+
+    @staticmethod
+    def _get_base_url(url):
+        return f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
+
+    @staticmethod
+    def _initialize_file(file_name, file_type, init_type):
+        path = os.path.join(os.getcwd(), file_name)
+        mode = {
+            FileType.JSON: 'w',
+            FileType.PICKLE: 'wb'
+        }
+        if not os.path.exists(path):
+            with open(path, mode[file_type]) as f:
+                init_object = {
+                    InitType.LIST: list(),
+                    InitType.SET: set(),
+                    InitType.DICT: dict()
+                }
+                module = {
+                    FileType.JSON: json,
+                    FileType.PICKLE: pickle
+                }
+                module[file_type].dump(init_object[init_type], f)
+
+    @staticmethod
+    def _check_update(url, content):
+        # Проверяет, что url обновилась
+        path = os.path.join(os.getcwd(), HASHED_URL_JSON)
+        with open(path, 'r') as f:
+            hash_urls = json.load(f)
+        if url not in hash_urls:
+            return True
+        old_hash = hash_urls[url]
+        new_hash = hashlib.sha256(content.encode()).hexdigest()
+        return old_hash != new_hash  # При проверке мы пренебрегаем коллизиями
+
+    @staticmethod
+    def _hash_url(url, content):
+        path = os.path.join(os.getcwd(), HASHED_URL_JSON)
+        with open(path, 'r') as f:
+            hash_urls = json.load(f)
+        hash_urls[url] = hashlib.sha256(content.encode()).hexdigest()
+        with open(path, 'w') as f:
+            json.dump(hash_urls, f, indent=4)
+
+    @staticmethod
+    def _add_edge(start, end):
+        path = os.path.join(os.getcwd(), ADJESENT_EDGES_URL)
+        with open(path, 'rb') as f:
+            edges = pickle.load(f)
+        edges.append((start, end))
+        with open(path, 'wb') as f:
+            pickle.dump(edges, f)
 
     @abc.abstractmethod
     async def _unload_data(self, data):

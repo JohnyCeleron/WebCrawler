@@ -7,7 +7,7 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 
 from src.crawler import WebCrawler
-
+from src.enums import ActionQueuePickle, FileType, InitType
 UPLOAD_DATA_LOCK = asyncio.Lock()
 PROCESS_PAGE_LOCK = asyncio.Lock()
 
@@ -20,7 +20,7 @@ class ImageCrawler(WebCrawler):
                          max_urls=max_urls,
                          start_urls=start_urls,
                          check_robots_txt=check_robots_txt)
-        super()._initialize_json_file(IMAGE_DATA_JSON)
+        super()._initialize_file(IMAGE_DATA_JSON, FileType.JSON, InitType.DICT)
         path = os.path.join(os.getcwd(), IMAGE_DATA_JSON)
         with open(path, 'r') as f:
             old_data = json.load(f)

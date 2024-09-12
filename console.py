@@ -6,6 +6,7 @@ import colorama
 from colorama import Style, Fore
 from src.default_crawler import DefaultCrawler
 from src.image_crawler import ImageCrawler
+from src.graph_builder import draw_graph
 
 DEFAULT_MAX_URLS = 100
 DEFAULT_MAX_DEPTH = 5
@@ -16,7 +17,7 @@ async def run(crawler):
     async with crawler:
         await crawler.run()
     print(f"{Style.BRIGHT}{Fore.LIGHTGREEN_EX}End{Style.RESET_ALL}")
-
+    draw_graph()
 
 
 def _get_parser():
