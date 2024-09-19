@@ -1,13 +1,13 @@
 import asyncio
 import json
 import os
-from collections import defaultdict
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
 from src.crawler import WebCrawler
-from src.enums import ActionQueuePickle, FileType, InitType
+from src.enums import FileType, InitType
+
 UPLOAD_DATA_LOCK = asyncio.Lock()
 PROCESS_PAGE_LOCK = asyncio.Lock()
 
@@ -15,10 +15,11 @@ IMAGE_DATA_JSON = 'image_data.json'
 
 
 class ImageCrawler(WebCrawler):
-    def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
+    def __init__(self, max_depth, max_urls, start_urls, do_continue=False, check_robots_txt=True):
         super().__init__(max_depth=max_depth,
                          max_urls=max_urls,
                          start_urls=start_urls,
+                         do_continue=do_continue,
                          check_robots_txt=check_robots_txt)
         super()._initialize_file(IMAGE_DATA_JSON, FileType.JSON, InitType.DICT)
         path = os.path.join(os.getcwd(), IMAGE_DATA_JSON)

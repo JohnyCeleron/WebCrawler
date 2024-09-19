@@ -15,31 +15,69 @@ import colorama
 from bs4 import BeautifulSoup
 
 CRAWLER_LOCK = asyncio.Lock()
-URLS_IN_QUEUE_LOCK = asyncio.Lock()
+METADATA_LOCK = asyncio.Lock()
 
 MAX_SIZE_QUEUE = 20
 HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
-ADJESENT_EDGES_URL = 'adjesent_edges_url.pickle'  # pickle, который понадобится для того, чтобы граф сделать
-URLS_IN_QUEUE = 'urls_in_queue.pickle' #будет хранить информацию о текущих url в очередях
+ADJESENT_EDGES_URL = 'adjesent_edges_url'  # pickle, который понадобится для того, чтобы граф сделать
+#URLS_IN_QUEUE = 'urls_in_queue.pickle'  # будет хранить информацию о текущих url в очередях
+CRAWLER_META = 'metadata'  # будет хранить информацию: max_depth, max_urls, visited_urls, count_crawled_urls, urls_in_queue(url, которые остались в очередях)
 
 
 class WebCrawler(abc.ABC):
-    def __init__(self, max_depth, max_urls, start_urls, check_robots_txt=True):
+    def __init__(self, max_depth, max_urls, start_urls, do_continue=False,
+                 check_robots_txt=True):
         self.max_depth = max_depth
         self.max_urls = max_urls
         self.start_urls = start_urls
         self._check_robots_txt = check_robots_txt
         self._robots = self._prepare_robot_txt_parsers()
         self._crawl_delays = self._get_crawl_delays()
-        self._count_crawled_urls = 0
-        self._count_url_in_queues = 0
-        self._visited_url = set()
+        self._do_continue = do_continue
 
+        self._create_files(do_continue)
+        self._count_crawled_urls = self._get_count_crawled_urls()
+        self._count_url_in_queues = self._get_count_url_in_queues()
+        self._visited_url = self._get_start_visited_url()
+
+    @staticmethod
+    def _get_count_crawled_urls():
+        metadata_path = os.path.join(os.getcwd(), CRAWLER_META)
+        with open(metadata_path, 'rb') as f:
+            metadata = pickle.load(f)
+        return metadata['count_crawled_urls']
+
+    @staticmethod
+    def _get_count_url_in_queues():
+        metadata_path = os.path.join(os.getcwd(), CRAWLER_META)
+        with open(metadata_path, 'rb') as f:
+            metadata = pickle.load(f)
+        return len(metadata['urls_in_queue'])
+
+    def _create_files(self, do_continue):
         self._initialize_file(HASHED_URL_JSON, FileType.JSON, InitType.DICT)
-        if os.path.exists(os.path.join(os.getcwd(), ADJESENT_EDGES_URL)):
-            os.remove(os.path.join(os.getcwd(), ADJESENT_EDGES_URL))
-        self._initialize_file(ADJESENT_EDGES_URL, FileType.PICKLE, InitType.LIST)
-        self._initialize_file(URLS_IN_QUEUE, FileType.PICKLE, InitType.SET)
+        if not do_continue:
+            if os.path.exists(os.path.join(os.getcwd(), ADJESENT_EDGES_URL)):
+                os.remove(os.path.join(os.getcwd(), ADJESENT_EDGES_URL))
+            if os.path.exists(os.path.join(os.getcwd(), CRAWLER_META)):
+                os.remove(os.path.join(os.getcwd(), CRAWLER_META))
+        self._initialize_file(ADJESENT_EDGES_URL, FileType.PICKLE,
+                              InitType.DICT)
+        self._create_metadata_file()
+
+    def _create_metadata_file(self):
+        path = os.path.join(os.getcwd(), CRAWLER_META)
+        if not os.path.exists(path):
+            with open(path, 'wb') as f:
+                metadata = {
+                    "max_depth": self._max_depth,
+                    "max_urls": self._max_urls,
+                    "visited_urls": set(),
+                    "count_crawled_urls": 0,
+                    "urls_in_queue": set(),
+                    "crawl_queue": {url: deque() for url in self.start_urls}
+                }
+                pickle.dump(metadata, f)
 
     @property
     def max_depth(self):
@@ -102,16 +140,46 @@ class WebCrawler(abc.ABC):
         for consumer in consumers:
             consumer.cancel()
 
+    @staticmethod
+    def _get_metadata():
+        with open(CRAWLER_META, 'rb') as f:
+            return pickle.load(f)
+
+    @staticmethod
+    def _save_metadata(data):
+        with open(CRAWLER_META, 'wb') as f:
+            pickle.dump(data, f)
+
+    def _get_deque(self, url):
+        metadata = self._get_metadata()
+        return metadata['crawl_queue'][url]
+
+    async def _add_to_queue(self, start_url, queue, element):
+        async with METADATA_LOCK:
+            queue.append(element)
+            metadata = self._get_metadata()
+            metadata['crawl_queue'][start_url].append(element)
+            self._save_metadata(metadata)
+
+    async def _remove_from_queue(self, start_url, queue):
+        async with METADATA_LOCK:
+            metadata = self._get_metadata()
+            metadata['crawl_queue'][start_url].popleft()
+            removed_element = queue.popleft()
+            self._save_metadata(metadata)
+            return removed_element
+
     async def start_crawl(self, start_url, queue_process_page):
         async with CRAWLER_LOCK:
-            queue = deque()
-            queue.append((0, start_url, None))
-            await self._do_action_with_queue_pickle(start_url, ActionQueuePickle.ADD)
-            self._count_url_in_queues += 1
-            self._visited_url.add(start_url)
+            queue = self._get_deque(start_url)
+            if len(queue) == 0:
+                await self._add_to_queue(start_url, queue, (0, start_url, None))
+                await self._do_action_with_queue_pickle(start_url, ActionQueuePickle.ADD)
+                self._count_url_in_queues += 1
+                await self._add_to_visited_urls(start_url)
 
         while len(queue) > 0:
-            depth, current_url, previous_url = queue.popleft()
+            depth, current_url, previous_url = await self._remove_from_queue(start_url, queue)
             await self._do_action_with_queue_pickle(current_url, ActionQueuePickle.REMOVE)
             async with CRAWLER_LOCK:
                 self._count_url_in_queues -= 1
@@ -120,7 +188,7 @@ class WebCrawler(abc.ABC):
                 continue
 
             async with CRAWLER_LOCK:
-                self._count_crawled_urls += 1
+                await self._update_count_crawled_urls()
                 try:
                     html_content = await self._get_html_content(current_url)
                 except aiohttp.ClientError:
@@ -131,17 +199,17 @@ class WebCrawler(abc.ABC):
                     f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
 
             if previous_url is not None:
-                self._add_edge(previous_url, current_url)
+                self._add_edge(previous_url, current_url, start_url)
             if self._check_update(current_url, html_content):
                 print(f'{colorama.Fore.YELLOW}UPDATE {current_url}')
                 self._hash_url(current_url, html_content)
                 await queue_process_page.put((current_url, html_content))
             await self._queue_crawl_page_put(current_url, depth, html_content,
-                                             queue)
+                                             queue, start_url)
             await self._make_delay(start_url)
 
     async def _queue_crawl_page_put(self, current_url, depth, html_content,
-                                    queue_crawl_page):
+                                    queue_crawl_page, start_url):
         async with CRAWLER_LOCK:
             MAX_NEXT_URLS = 5
             next_url_count = 1
@@ -151,10 +219,12 @@ class WebCrawler(abc.ABC):
                     break
                 if url not in self._visited_url:
                     next_url_count += 1
-                    self._visited_url.add(url)
-                    await self._do_action_with_queue_pickle(url, ActionQueuePickle.ADD)
+                    await self._add_to_visited_urls(url)
+                    await self._do_action_with_queue_pickle(url,
+                                                            ActionQueuePickle.ADD)
                     self._count_url_in_queues += 1
-                    queue_crawl_page.append((depth + 1, url, current_url))
+                    await self._add_to_queue(start_url, queue_crawl_page,
+                                             (depth + 1, url, current_url))
 
     async def _get_consumer_task(self, queue):
         while True:
@@ -182,9 +252,10 @@ class WebCrawler(abc.ABC):
 
     def _set_robots(self, robots, url):
         base_url = self._get_base_url(url)
-        robots[base_url] = RobotFileParser()
-        robots[base_url].set_url(f"{base_url}/robots.txt")
-        robots[base_url].read()
+        if base_url not in robots:
+            robots[base_url] = RobotFileParser()
+            robots[base_url].set_url(f"{base_url}/robots.txt")
+            robots[base_url].read()
 
     async def _make_delay(self, url):
         if not self._check_robots_txt:
@@ -218,16 +289,41 @@ class WebCrawler(abc.ABC):
                 yield link
 
     @staticmethod
+    def _get_start_visited_url():
+        path = os.path.join(os.getcwd(), CRAWLER_META)
+        with open(path, 'rb') as f:
+            metadata = pickle.load(f)
+        return metadata['visited_urls']
+
+    @staticmethod
     async def _do_action_with_queue_pickle(url, action):
-        async with URLS_IN_QUEUE_LOCK:
-            with open(URLS_IN_QUEUE, 'rb') as f:
-                data = pickle.load(f)
+        async with METADATA_LOCK:
+            with open(CRAWLER_META, 'rb') as f:
+                metadata = pickle.load(f)
             if action == ActionQueuePickle.ADD:
-                data.add(url)
+                metadata['urls_in_queue'].add(url)
             elif action == ActionQueuePickle.REMOVE:
-                data.remove(url)
-            with open(URLS_IN_QUEUE, 'wb') as f:
-                pickle.dump(data, f)
+                metadata['urls_in_queue'].remove(url)
+            with open(CRAWLER_META, 'wb') as f:
+                pickle.dump(metadata, f)
+
+    async def _add_to_visited_urls(self, url):
+        self._visited_url.add(url)
+        async with METADATA_LOCK:
+            with open(CRAWLER_META, 'rb') as f:
+                metadata = pickle.load(f)
+            metadata['visited_urls'].add(url)
+            with open(CRAWLER_META, 'wb') as f:
+                pickle.dump(metadata, f)
+
+    async def _update_count_crawled_urls(self):
+        self._count_crawled_urls += 1
+        async with METADATA_LOCK:
+            with open(CRAWLER_META, 'rb') as f:
+                metadata = pickle.load(f)
+            metadata['count_crawled_urls'] += 1
+            with open(CRAWLER_META, 'wb') as f:
+                pickle.dump(metadata, f)
 
     @staticmethod
     def _get_base_url(url):
@@ -275,11 +371,13 @@ class WebCrawler(abc.ABC):
             json.dump(hash_urls, f, indent=4)
 
     @staticmethod
-    def _add_edge(start, end):
+    def _add_edge(start, end, start_vertix):
         path = os.path.join(os.getcwd(), ADJESENT_EDGES_URL)
         with open(path, 'rb') as f:
             edges = pickle.load(f)
-        edges.append((start, end))
+        if start_vertix not in edges:
+            edges[start_vertix] = list()
+        edges[start_vertix].append((start, end))
         with open(path, 'wb') as f:
             pickle.dump(edges, f)
 

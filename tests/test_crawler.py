@@ -54,7 +54,7 @@ class TestCrawler:
             (1, 1, [BASE_URL], 1),
             (2, 2, [BASE_URL], 2),
             (2, 1, [BASE_URL], 1),
-            (2, 10, [BASE_URL, OTHER_URL], 8),
+            (2, 10, [BASE_URL, OTHER_URL], 10),
             (2, 1, [BASE_URL, OTHER_URL, IMG_URL], 1)
         ])
     @pytest.mark.asyncio

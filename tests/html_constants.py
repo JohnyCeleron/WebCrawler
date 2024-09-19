@@ -58,30 +58,30 @@ HTML_WITH_OTHER_URL = f"""
 <!DOCTYPE html>
 <html>
   <body>
-    <a href="https://www.other.org/foo1">
+    <a href="https://www.other_url.org/foo1">
         <img src="image_other1.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
-    <a href="https://www.other.org/foo2">
+    <a href="https://www.other_url.org/foo2">
         <img src="image_other2.png" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
-    <a href="https://www.other.org/foo3">
+    <a href="https://www.other_url.org/foo3">
       Click Here to Open in Same Tab
     </a>
     <br />
-    <a href="https://www.other.org/foo4/other/base_url.org">
+    <a href="https://www.other_url.org/foo4/other/base_url.org">
       Click Here to Open in Same Tab
     </a>
     <br />
-    <a href="https://www.other.org/foo5">
+    <a href="https://www.other_url.org/foo5">
         <img src="image_other5.jpg" alt="Andrej Kesely&#39;s user avatar" width="32" height="32" class="bar-sm">
       Click Here to Open in Same Tab
     </a>
     <br />
-    <a href="https://www.other.org/foo6">
+    <a href="https://www.other_url.org/foo6">
       Click Here to Open in Same Tab
     </a>
   </body>
