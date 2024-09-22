@@ -36,7 +36,6 @@ class WebCrawler(abc.ABC):
         self._do_continue = do_continue
 
         self._create_files(do_continue)
-        self._count_crawled_urls = self._get_count_crawled_urls()
         self._count_url_in_queues = self._get_count_url_in_queues()
         self._visited_url = self._get_start_visited_url()
 
@@ -173,18 +172,15 @@ class WebCrawler(abc.ABC):
                 if depth + 1 > self._max_depth:
                     continue
 
-                await self._update_count_crawled_urls()
                 try:
                     html_content = await self._get_html_content(current_url)
                 except aiohttp.ClientResponseError as e:
-                    if e.status == 404:
-                        print(f'{colorama.Fore.YELLOW}{self._count_crawled_urls} '
-                              f'WARNING: The page was not found (error 404): {current_url}')
-                    else:
-                        print(f'{colorama.Fore.YELLOW}{self._count_crawled_urls} '
-                              f'WARNING: Error receiving the response {e}')
+                    await self._except_client_response_error(current_url, e)
                     continue
-                print(f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
+                else:
+                    await self._update_count_crawled_urls()
+                    count_crawled_urls = self._get_count_crawled_urls()
+                    print(f'{colorama.Fore.GREEN}{count_crawled_urls} {current_url}')
 
             self._add_edge(previous_url, current_url, start_url)
             if self._check_update(current_url, html_content):
@@ -194,13 +190,24 @@ class WebCrawler(abc.ABC):
             await self._queue_crawl_page_put(current_url, depth, html_content, queue, start_url)
             await self._make_delay(start_url)
 
+    async def _except_client_response_error(self, current_url, e):
+        await self._update_count_crawled_urls()
+        count_crawled_urls = self._get_count_crawled_urls()
+        if e.status == 404:
+            print(f'{colorama.Fore.YELLOW}{count_crawled_urls} '
+                  f'WARNING: The page was not found (error 404): {current_url}')
+        else:
+            print(f'{colorama.Fore.YELLOW}{count_crawled_urls} '
+                  f'WARNING: Error receiving the response {e}')
+
     async def _queue_crawl_page_put(self, current_url, depth, html_content,
                                     queue_crawl_page, start_url):
         async with CRAWLER_LOCK:
             MAX_NEXT_URLS = 5
             next_url_count = 1
             for url in self._get_links(html_content, current_url):
-                if self._count_url_in_queues + self._count_crawled_urls >= self._max_urls \
+                count_crawled_urls = self._get_count_crawled_urls()
+                if self._count_url_in_queues + count_crawled_urls >= self._max_urls \
                         or next_url_count > MAX_NEXT_URLS:
                     break
                 if url not in self._visited_url:
@@ -216,7 +223,7 @@ class WebCrawler(abc.ABC):
             queue.task_done()
 
     async def _get_html_content(self, current_url):
-        async with self.session.get(current_url, timeout=10) as response:
+        async with self.session.get(current_url, timeout=TIMEOUT_CONNECTION) as response:
             html_content = await response.text()
         return html_content
 
@@ -287,7 +294,6 @@ class WebCrawler(abc.ABC):
             metadata = self._get_metadata()
             metadata['count_crawled_urls'] += 1
             self._save_metadata(metadata)
-            self._count_crawled_urls += 1
 
     @staticmethod
     def _get_base_url(url):
@@ -355,19 +361,3 @@ class WebCrawler(abc.ABC):
         # Обрабатывает страницу
         pass
 
-
-if __name__ == '__main__':
-    async def f():
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get('https://www.geeksforgeeks.org/') as response:
-                    response_text = await response.text()
-                    print(response_text[:100])
-        except ValueError:
-            print('adfadf')
-    async def main():
-        await f()
-
-
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
