@@ -46,7 +46,7 @@ class TestImageLinks:
     async def _check(self, crawler, url, expected_images=None):
         if url not in html_constants.TEST_RESPONSE or \
                 html_constants.TEST_RESPONSE[url]['status'] == 404:
-            raise aiohttp.ClientError()
+            raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
         content = html_constants.TEST_RESPONSE[url]['html_content']
         await crawler._process_page(url, content)
         actual_images = crawler.data[url]
@@ -72,10 +72,10 @@ class TestCrawlerImages:
 
         async def mock_get_html_content(_, url):
             if url not in html_constants.TEST_RESPONSE:
-                raise aiohttp.ClientError()
+                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
             html_content = html_constants.TEST_RESPONSE[url]["html_content"]
             if html_content == 'error':
-                raise aiohttp.ClientError()
+                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
             return html_content
 
         monkeypatch.setattr("src.crawler.WebCrawler._get_html_content",

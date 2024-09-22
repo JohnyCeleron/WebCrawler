@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os.path
 import pickle
+import aiohttp
 
 import colorama
 from colorama import Style, Fore
@@ -105,7 +106,9 @@ def main():
     except AssertionError as e:
         print(f'{colorama.Fore.YELLOW}{e}')
     except KeyboardInterrupt:
-        print(f'{Style.RESET_ALL}The program was prematurely stopped')
+        print(f'{Style.RESET_ALL} The program was prematurely stopped')
+    except asyncio.TimeoutError:
+        print(f'{Style.RESET_ALL} The time expired when sending or receiving the request')
     finally:
         print(colorama.Style.RESET_ALL)
         exit()

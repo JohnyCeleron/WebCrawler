@@ -18,10 +18,10 @@ CRAWLER_LOCK = asyncio.Lock()
 METADATA_LOCK = asyncio.Lock()
 
 MAX_SIZE_QUEUE = 20
+TIMEOUT_CONNECTION = 5
 HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
 ADJESENT_EDGES_URL = 'adjesent_edges_url'  # pickle, который понадобится для того, чтобы граф сделать
-#URLS_IN_QUEUE = 'urls_in_queue.pickle'  # будет хранить информацию о текущих url в очередях
-CRAWLER_META = 'metadata'  # будет хранить информацию: max_depth, max_urls, visited_urls, count_crawled_urls, urls_in_queue(url, которые остались в очередях)
+CRAWLER_META = 'metadata'  # будет хранить информацию: max_depth, max_urls, visited_urls, count_crawled_urls
 
 
 class WebCrawler(abc.ABC):
@@ -40,19 +40,13 @@ class WebCrawler(abc.ABC):
         self._count_url_in_queues = self._get_count_url_in_queues()
         self._visited_url = self._get_start_visited_url()
 
-    @staticmethod
-    def _get_count_crawled_urls():
-        metadata_path = os.path.join(os.getcwd(), CRAWLER_META)
-        with open(metadata_path, 'rb') as f:
-            metadata = pickle.load(f)
+    def _get_count_crawled_urls(self):
+        metadata = self._get_metadata()
         return metadata['count_crawled_urls']
 
-    @staticmethod
-    def _get_count_url_in_queues():
-        metadata_path = os.path.join(os.getcwd(), CRAWLER_META)
-        with open(metadata_path, 'rb') as f:
-            metadata = pickle.load(f)
-        return len(metadata['urls_in_queue'])
+    def _get_count_url_in_queues(self):
+        metadata = self._get_metadata()
+        return sum(len(queue) for queue in metadata['crawl_queue'].values())
 
     def _create_files(self, do_continue):
         self._initialize_file(HASHED_URL_JSON, FileType.JSON, InitType.DICT)
@@ -74,7 +68,6 @@ class WebCrawler(abc.ABC):
                     "max_urls": self._max_urls,
                     "visited_urls": set(),
                     "count_crawled_urls": 0,
-                    "urls_in_queue": set(),
                     "crawl_queue": {url: deque() for url in self.start_urls}
                 }
                 pickle.dump(metadata, f)
@@ -121,11 +114,6 @@ class WebCrawler(abc.ABC):
         await self.session.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self):
-        # TODO: ограничить размер очереди
-        # TODO: проверять что страница обновилась
-        # TODO: научиться продолжать работу краулера после остановки + написать это в README
-        # TODO: строить граф обход
-
         queue_process_page = asyncio.Queue(maxsize=MAX_SIZE_QUEUE)
         producers = [
             asyncio.create_task(self.start_crawl(url, queue_process_page))
@@ -142,7 +130,8 @@ class WebCrawler(abc.ABC):
 
     @staticmethod
     def _get_metadata():
-        with open(CRAWLER_META, 'rb') as f:
+        metadata_path = os.path.join(os.getcwd(), CRAWLER_META)
+        with open(metadata_path, 'rb') as f:
             return pickle.load(f)
 
     @staticmethod
@@ -150,7 +139,7 @@ class WebCrawler(abc.ABC):
         with open(CRAWLER_META, 'wb') as f:
             pickle.dump(data, f)
 
-    def _get_deque(self, url):
+    def _get_queue(self, url):
         metadata = self._get_metadata()
         return metadata['crawl_queue'][url]
 
@@ -160,6 +149,7 @@ class WebCrawler(abc.ABC):
             metadata = self._get_metadata()
             metadata['crawl_queue'][start_url].append(element)
             self._save_metadata(metadata)
+            self._count_url_in_queues += 1
 
     async def _remove_from_queue(self, start_url, queue):
         async with METADATA_LOCK:
@@ -167,45 +157,41 @@ class WebCrawler(abc.ABC):
             metadata['crawl_queue'][start_url].popleft()
             removed_element = queue.popleft()
             self._save_metadata(metadata)
+            self._count_url_in_queues -= 1
             return removed_element
 
     async def start_crawl(self, start_url, queue_process_page):
+        queue = self._get_queue(start_url)
         async with CRAWLER_LOCK:
-            queue = self._get_deque(start_url)
             if len(queue) == 0:
                 await self._add_to_queue(start_url, queue, (0, start_url, None))
-                await self._do_action_with_queue_pickle(start_url, ActionQueuePickle.ADD)
-                self._count_url_in_queues += 1
                 await self._add_to_visited_urls(start_url)
 
         while len(queue) > 0:
-            depth, current_url, previous_url = await self._remove_from_queue(start_url, queue)
-            await self._do_action_with_queue_pickle(current_url, ActionQueuePickle.REMOVE)
             async with CRAWLER_LOCK:
-                self._count_url_in_queues -= 1
+                depth, current_url, previous_url = await self._remove_from_queue(start_url, queue)
+                if depth + 1 > self._max_depth:
+                    continue
 
-            if depth + 1 > self._max_depth:
-                continue
-
-            async with CRAWLER_LOCK:
                 await self._update_count_crawled_urls()
                 try:
                     html_content = await self._get_html_content(current_url)
-                except aiohttp.ClientError:
-                    print(f'{colorama.Fore.YELLOW}WARNING: Could not get the '
-                          f'html code for {current_url}')
+                except aiohttp.ClientResponseError as e:
+                    if e.status == 404:
+                        print(f'{colorama.Fore.YELLOW}{self._count_crawled_urls} '
+                              f'WARNING: The page was not found (error 404): {current_url}')
+                    else:
+                        print(f'{colorama.Fore.YELLOW}{self._count_crawled_urls} '
+                              f'WARNING: Error receiving the response {e}')
                     continue
-                print(
-                    f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
+                print(f'{colorama.Fore.GREEN}{self._count_crawled_urls} {current_url}')
 
-            if previous_url is not None:
-                self._add_edge(previous_url, current_url, start_url)
+            self._add_edge(previous_url, current_url, start_url)
             if self._check_update(current_url, html_content):
                 print(f'{colorama.Fore.YELLOW}UPDATE {current_url}')
                 self._hash_url(current_url, html_content)
                 await queue_process_page.put((current_url, html_content))
-            await self._queue_crawl_page_put(current_url, depth, html_content,
-                                             queue, start_url)
+            await self._queue_crawl_page_put(current_url, depth, html_content, queue, start_url)
             await self._make_delay(start_url)
 
     async def _queue_crawl_page_put(self, current_url, depth, html_content,
@@ -220,9 +206,6 @@ class WebCrawler(abc.ABC):
                 if url not in self._visited_url:
                     next_url_count += 1
                     await self._add_to_visited_urls(url)
-                    await self._do_action_with_queue_pickle(url,
-                                                            ActionQueuePickle.ADD)
-                    self._count_url_in_queues += 1
                     await self._add_to_queue(start_url, queue_crawl_page,
                                              (depth + 1, url, current_url))
 
@@ -233,7 +216,7 @@ class WebCrawler(abc.ABC):
             queue.task_done()
 
     async def _get_html_content(self, current_url):
-        async with self.session.get(current_url) as response:
+        async with self.session.get(current_url, timeout=10) as response:
             html_content = await response.text()
         return html_content
 
@@ -288,42 +271,23 @@ class WebCrawler(abc.ABC):
             if link.startswith(base_url) and self._can_fetch(link):
                 yield link
 
-    @staticmethod
-    def _get_start_visited_url():
-        path = os.path.join(os.getcwd(), CRAWLER_META)
-        with open(path, 'rb') as f:
-            metadata = pickle.load(f)
+    def _get_start_visited_url(self):
+        metadata = self._get_metadata()
         return metadata['visited_urls']
-
-    @staticmethod
-    async def _do_action_with_queue_pickle(url, action):
-        async with METADATA_LOCK:
-            with open(CRAWLER_META, 'rb') as f:
-                metadata = pickle.load(f)
-            if action == ActionQueuePickle.ADD:
-                metadata['urls_in_queue'].add(url)
-            elif action == ActionQueuePickle.REMOVE:
-                metadata['urls_in_queue'].remove(url)
-            with open(CRAWLER_META, 'wb') as f:
-                pickle.dump(metadata, f)
 
     async def _add_to_visited_urls(self, url):
         self._visited_url.add(url)
         async with METADATA_LOCK:
-            with open(CRAWLER_META, 'rb') as f:
-                metadata = pickle.load(f)
+            metadata = self._get_metadata()
             metadata['visited_urls'].add(url)
-            with open(CRAWLER_META, 'wb') as f:
-                pickle.dump(metadata, f)
+            self._save_metadata(metadata)
 
     async def _update_count_crawled_urls(self):
-        self._count_crawled_urls += 1
         async with METADATA_LOCK:
-            with open(CRAWLER_META, 'rb') as f:
-                metadata = pickle.load(f)
+            metadata = self._get_metadata()
             metadata['count_crawled_urls'] += 1
-            with open(CRAWLER_META, 'wb') as f:
-                pickle.dump(metadata, f)
+            self._save_metadata(metadata)
+            self._count_crawled_urls += 1
 
     @staticmethod
     def _get_base_url(url):
@@ -390,3 +354,20 @@ class WebCrawler(abc.ABC):
     async def _process_page(self, url, html_content):
         # Обрабатывает страницу
         pass
+
+
+if __name__ == '__main__':
+    async def f():
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get('https://www.geeksforgeeks.org/') as response:
+                    response_text = await response.text()
+                    print(response_text[:100])
+        except ValueError:
+            print('adfadf')
+    async def main():
+        await f()
+
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())

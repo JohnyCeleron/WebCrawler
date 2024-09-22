@@ -68,10 +68,10 @@ class TestCrawler:
             nonlocal count_crawled_urls
             count_crawled_urls += 1
             if url not in html_constants.TEST_RESPONSE:
-                raise aiohttp.ClientError()
+                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
             html_content = html_constants.TEST_RESPONSE[url]["html_content"]
             if html_content == 'error':
-                raise aiohttp.ClientError()
+                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
             return html_content
 
         monkeypatch.setattr("src.crawler.WebCrawler._get_html_content",

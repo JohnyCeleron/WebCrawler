@@ -18,8 +18,11 @@ def draw_graph():
     with open(path, 'rb') as f:
         edge_groups = pickle.load(f)
     for i, edges in enumerate(edge_groups.values()):
-        G.add_edges_from(edges)
         for v1, v2 in edges:
+            G.add_node(v2)
+            if v1 is not None:
+                G.add_node(v1)
+                G.add_edge(v1, v2)
             color_map[v1] = COLOR[i % len(COLOR)]
             color_map[v2] = COLOR[i % len(COLOR)]
     size_map = {start_vertixes: 300 for start_vertixes in edge_groups.keys()}
@@ -30,5 +33,4 @@ def draw_graph():
             edgecolors=[edge_colors.get(node, 'black') for node in G.nodes()],
             with_labels=True,
             arrows=True, font_size=5)
-    #print('asdf')
     plt.show()
