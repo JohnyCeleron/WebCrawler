@@ -3,6 +3,7 @@ import json
 import os
 from urllib.parse import urljoin
 
+import aiohttp
 from bs4 import BeautifulSoup
 
 from src.crawler import WebCrawler
@@ -49,11 +50,14 @@ class ImageCrawler(WebCrawler):
 
 
 async def main():
-    async with ImageCrawler(
-            start_urls=['https://ru.wikipedia.org/wiki/Заглавная_страница'],
-            max_urls=100,
-            max_depth=5) as crawler:
-        await crawler.run()
+    try:
+        async with ImageCrawler(
+                start_urls=['https://ru.wikipedia.org/wiki/Заглавная_страница', 'https://www.geeksforgeeks.org/'],
+                max_urls=100,
+                max_depth=5) as crawler:
+            await crawler.run()
+    except aiohttp.ClientConnectorError:
+        print('asdf')
 
 
 if __name__ == '__main__':
