@@ -69,6 +69,8 @@ class TestCrawlerImages:
     async def test_crawler_without_robots_txt(self, max_depth, max_urls,
                                               start_urls,
                                               monkeypatch):
+        #TODO: посмотреть как мокать на aiohttp
+        #TODO: тесты доделать
 
         async def mock_get_html_content(_, url):
             if url not in html_constants.TEST_RESPONSE:

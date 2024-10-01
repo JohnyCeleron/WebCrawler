@@ -7,7 +7,7 @@ import json
 import hashlib
 from src.enums import ActionQueuePickle, InitType, FileType
 from collections import deque
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, unquote
 from urllib.robotparser import RobotFileParser
 
 import aiohttp
@@ -17,6 +17,9 @@ from bs4 import BeautifulSoup
 CRAWLER_LOCK = asyncio.Lock()
 METADATA_LOCK = asyncio.Lock()
 
+#TODO:редактировать константы в консольке
+#TODO: конфигурировать выгрузку данных
+#TODO: сделать граф более читаемым
 MAX_SIZE_QUEUE = 20
 TIMEOUT_CONNECTION = 5
 HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
@@ -117,7 +120,7 @@ class WebCrawler(abc.ABC):
         producers = [
             asyncio.create_task(self.start_crawl(url, queue_process_page))
             for count, url in enumerate(self._start_urls) if
-            count < self._max_urls]
+            count < self._max_urls and self._can_fetch(url)]
         consumers = [
             asyncio.create_task(self._get_consumer_task(queue_process_page))
             for _ in range(3)]
@@ -163,6 +166,7 @@ class WebCrawler(abc.ABC):
         queue = self._get_queue(start_url)
         async with CRAWLER_LOCK:
             if len(queue) == 0:
+                start_url = self._decode_url_to_utf8(start_url)
                 await self._add_to_queue(start_url, queue, (0, start_url, None))
                 await self._add_to_visited_urls(start_url)
 
@@ -207,6 +211,7 @@ class WebCrawler(abc.ABC):
             next_url_count = 1
             for url in self._get_links(html_content, current_url):
                 count_crawled_urls = self._get_count_crawled_urls()
+                url = self._decode_url_to_utf8(url)
                 if self._count_url_in_queues + count_crawled_urls >= self._max_urls \
                         or next_url_count > MAX_NEXT_URLS:
                     break
@@ -296,6 +301,10 @@ class WebCrawler(abc.ABC):
             self._save_metadata(metadata)
 
     @staticmethod
+    def _decode_url_to_utf8(url):
+        return unquote(url)
+
+    @staticmethod
     def _get_base_url(url):
         return f"{urlparse(url).scheme}://{urlparse(url).netloc}/"
 
@@ -360,4 +369,3 @@ class WebCrawler(abc.ABC):
     async def _process_page(self, url, html_content):
         # Обрабатывает страницу
         pass
-

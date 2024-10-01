@@ -47,19 +47,3 @@ class ImageCrawler(WebCrawler):
                 new_data = list(old_data | img_urls)
                 self.data[url] = new_data
             await self._unload_data(self.data)
-
-
-async def main():
-    try:
-        async with ImageCrawler(
-                start_urls=['https://ru.wikipedia.org/wiki/Заглавная_страница', 'https://www.geeksforgeeks.org/'],
-                max_urls=100,
-                max_depth=5) as crawler:
-            await crawler.run()
-    except aiohttp.ClientConnectorError:
-        print('asdf')
-
-
-if __name__ == '__main__':
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
