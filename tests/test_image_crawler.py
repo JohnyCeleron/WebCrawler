@@ -67,23 +67,16 @@ class TestCrawlerImages:
             (2, 10, [BASE_URL, OTHER_URL])
         ])
     @pytest.mark.asyncio
-    async def test_crawler_without_robots_txt(self, max_depth, max_urls,
+    async def test_crawler_without_robots_txt(self, mock_urls, max_depth, max_urls,
                                               start_urls):
         # TODO: посмотреть как мокать на aiohttp
         # TODO: тесты доделать
-
-        with aioresponses() as m:
-            for url, response_data in html_constants.TEST_RESPONSE.items():
-                status = response_data['status']
-                html_content = response_data['html_content']
-                m.get(url, body=html_content, status=status)
-
-            async with ImageCrawler(max_depth=max_depth, max_urls=max_urls,
-                                    start_urls=start_urls,
-                                    check_robots_txt=False) as crawler:
-                await crawler.run()
-            self._check_only_image()
-
+        async with ImageCrawler(max_depth=max_depth, max_urls=max_urls,
+                                 start_urls=start_urls,
+                                check_robots_txt=False) as crawler:
+            await crawler.run()
+        self._check_only_image()
+        
     @staticmethod
     def _check_only_image():
         assert os.path.exists('image_data.json')

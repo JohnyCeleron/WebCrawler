@@ -17,9 +17,7 @@ from src.settings_constants import get_constants
 CRAWLER_LOCK = asyncio.Lock()
 METADATA_LOCK = asyncio.Lock()
 
-# TODO:редактировать константы в консольке
 # TODO: конфигурировать выгрузку данных
-# TODO: сделать граф более читаемым
 settings_constants = get_constants()
 
 

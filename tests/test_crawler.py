@@ -59,17 +59,11 @@ class TestCrawler:
             (2, 1, [BASE_URL, OTHER_URL, IMG_URL], 1)
         ])
     @pytest.mark.asyncio
-    async def test_crawler_without_robots_txt(self, max_depth, max_urls,
+    async def test_crawler_without_robots_txt(self, mock_urls, max_depth, max_urls,
                                               start_urls,
                                               expected_count_crawled_urls):
-        with aioresponses() as m:
-            for url, response_data in html_constants.TEST_RESPONSE.items():
-                status = response_data['status']
-                html_content = response_data['html_content']
-                m.get(url, body=html_content, status=status)
-
-            async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
-                                      start_urls=start_urls, check_robots_txt=False) as crawler:
-                await crawler.run()
-                count_crawled_urls = crawler.getter_meta.get_count_crawled_urls()
+        async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
+                                    start_urls=start_urls, check_robots_txt=False) as crawler:
+            await crawler.run()
+        count_crawled_urls = crawler.getter_meta.get_count_crawled_urls()
         assert count_crawled_urls == expected_count_crawled_urls
