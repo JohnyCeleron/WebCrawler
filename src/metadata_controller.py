@@ -11,6 +11,7 @@ METADATA_LOCK = asyncio.Lock()
 HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
 ADJESENT_EDGES_URL = 'adjesent_edges_url'  # pickle, который понадобится для того, чтобы граф сделать
 CRAWLER_META = 'metadata'  # будет хранить информацию: max_depth, max_urls, visited_urls, count_crawled_urls
+CONSTANTS_PICKLE = 'constants'
 
 
 class Builder:

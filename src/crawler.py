@@ -11,26 +11,24 @@ import aiohttp
 import colorama
 from bs4 import BeautifulSoup
 
-from src.metadata_controller import Builder, Getter, Updater
+from src.metadata_controller import Builder, Getter, Updater, HASHED_URL_JSON
+from src.settings_constants import get_constants
 
 CRAWLER_LOCK = asyncio.Lock()
 METADATA_LOCK = asyncio.Lock()
 
-#TODO:редактировать константы в консольке
-#TODO: конфигурировать выгрузку данных
-#TODO: сделать граф более читаемым
-MAX_SIZE_QUEUE = 20
-TIMEOUT_CONNECTION = 5
-CONSUMERS_COUNT = 10
-MAX_NEXT_URLS = 5
-
-
-HASHED_URL_JSON = 'hashed_url.json'  # json, в котором хранятся пары url: <hash>
-ADJESENT_EDGES_URL = 'adjesent_edges_url'  # pickle, который понадобится для того, чтобы граф сделать
-CRAWLER_META = 'metadata'  # будет хранить информацию: max_depth, max_urls, visited_urls, count_crawled_urls
+# TODO:редактировать константы в консольке
+# TODO: конфигурировать выгрузку данных
+# TODO: сделать граф более читаемым
+settings_constants = get_constants()
 
 
 class WebCrawler(abc.ABC):
+    MAX_SIZE_QUEUE = settings_constants.MAX_SIZE_QUEUE
+    TIMEOUT_CONNECTION = settings_constants.TIMEOUT_CONNECTION
+    CONSUMERS_COUNT = settings_constants.CONSUMERS_COUNT
+    MAX_NEXT_URLS = settings_constants.MAX_NEXT_URLS
+
     def __init__(self, max_depth, max_urls, start_urls, do_continue=False,
                  check_robots_txt=True):
         self.max_depth = max_depth
@@ -89,14 +87,14 @@ class WebCrawler(abc.ABC):
         await self.session.__aexit__(exc_type, exc_val, exc_tb)
 
     async def run(self):
-        queue_process_page = asyncio.Queue(maxsize=MAX_SIZE_QUEUE)
+        queue_process_page = asyncio.Queue(maxsize=self.MAX_SIZE_QUEUE)
         producers = [
             asyncio.create_task(self.start_crawl(url, queue_process_page))
             for count, url in enumerate(self._start_urls) if
             count < self._max_urls and self._can_fetch(url)]
         consumers = [
             asyncio.create_task(self._get_consumer_task(queue_process_page))
-            for _ in range(CONSUMERS_COUNT)]
+            for _ in range(self.CONSUMERS_COUNT)]
 
         await asyncio.gather(*producers)
         await queue_process_page.join()
@@ -108,12 +106,14 @@ class WebCrawler(abc.ABC):
         async with CRAWLER_LOCK:
             if len(queue) == 0:
                 start_url = self._decode_url_to_utf8(start_url)
-                await self.updater_meta.add_to_queue(start_url, queue, (0, start_url, None))
+                await self.updater_meta.add_to_queue(start_url, queue,
+                                                     (0, start_url, None))
                 await self.updater_meta.add_to_visited_urls(start_url)
 
         while len(queue) > 0:
             async with CRAWLER_LOCK:
-                depth, current_url, previous_url = await self.updater_meta.remove_from_queue(start_url, queue)
+                depth, current_url, previous_url = await self.updater_meta.remove_from_queue(
+                    start_url, queue)
                 if depth + 1 > self._max_depth:
                     continue
 
@@ -125,14 +125,15 @@ class WebCrawler(abc.ABC):
                 else:
                     await self.updater_meta.update_count_crawled_urls()
                     count_crawled_urls = self.getter_meta.get_count_crawled_urls()
-                    print(f'{colorama.Fore.GREEN}{count_crawled_urls} {current_url}')
-
+                    print(
+                        f'{colorama.Fore.GREEN}{count_crawled_urls} {current_url}')
             self.updater_meta._add_edge(previous_url, current_url, start_url)
             if self._check_update(current_url, html_content):
                 print(f'{colorama.Fore.YELLOW}UPDATE {current_url}')
                 self._hash_url(current_url, html_content)
                 await queue_process_page.put((current_url, html_content))
-            await self._queue_crawl_page_put(current_url, depth, html_content, queue, start_url)
+            await self._queue_crawl_page_put(current_url, depth, html_content,
+                                             queue, start_url)
             await self._make_delay(start_url)
 
     async def _except_client_response_error(self, current_url, e):
@@ -153,13 +154,15 @@ class WebCrawler(abc.ABC):
                 count_crawled_urls = self.getter_meta.get_count_crawled_urls()
                 url = self._decode_url_to_utf8(url)
                 if self._count_url_in_queues + count_crawled_urls >= self._max_urls \
-                        or next_url_count > MAX_NEXT_URLS:
+                        or next_url_count > self.MAX_NEXT_URLS:
                     break
                 if url not in self._visited_url:
                     next_url_count += 1
                     await self.updater_meta.add_to_visited_urls(url)
-                    await self.updater_meta.add_to_queue(start_url, queue_crawl_page,
-                                                         (depth + 1, url, current_url))
+                    await self.updater_meta.add_to_queue(start_url,
+                                                         queue_crawl_page,
+                                                         (depth + 1, url,
+                                                          current_url))
 
     async def _get_consumer_task(self, queue):
         while True:
@@ -168,7 +171,8 @@ class WebCrawler(abc.ABC):
             queue.task_done()
 
     async def _get_html_content(self, current_url):
-        async with self.session.get(current_url, timeout=TIMEOUT_CONNECTION) as response:
+        async with self.session.get(current_url,
+                                    timeout=self.TIMEOUT_CONNECTION) as response:
             html_content = await response.text()
         return html_content
 
@@ -251,7 +255,6 @@ class WebCrawler(abc.ABC):
         hash_urls[url] = hashlib.sha256(content.encode()).hexdigest()
         with open(path, 'w') as f:
             json.dump(hash_urls, f, indent=4)
-
 
     @abc.abstractmethod
     async def _unload_data(self, data):

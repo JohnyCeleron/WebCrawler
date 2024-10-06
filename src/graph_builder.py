@@ -1,10 +1,21 @@
 import os
 import pickle
+import random
+
 import networkx as nx
 import plotly.graph_objects as go
 import plotly.offline as py
-import random
-from src.crawler import ADJESENT_EDGES_URL
+
+from src.metadata_controller import ADJESENT_EDGES_URL
+from src.settings_constants import get_constants
+
+settings_constants = get_constants()
+
+NODE_SIZE = settings_constants.NODE_SIZE
+START_NODE_SIZE = settings_constants.START_NODE_SIZE
+ARROW_HEAD = settings_constants.ARROW_HEAD
+ARROW_SIZE = settings_constants.ARROW_SIZE
+ARROW_WIDTH = settings_constants.ARROW_WIDTH
 
 COLOR = ['cyan', 'orange', 'yellow', 'pink']
 
@@ -35,11 +46,11 @@ def draw_graph():
             fig.add_annotation(ax=node_pos[v1][0], ay=node_pos[v1][1],
                                x=node_pos[v2][0], y=node_pos[v2][1],
                                axref='x', ayref='y', xref='x', yref='y',
-                               arrowwidth=0.5, arrowcolor="black",
-                               arrowsize=1.5, showarrow=True, arrowhead=1, )
+                               arrowwidth=ARROW_WIDTH, arrowcolor="black",
+                               arrowsize=ARROW_SIZE, showarrow=True, arrowhead=ARROW_HEAD, )
             G.add_edge(v1, v2)
 
-    size_map = {start_vertices: 50 for start_vertices in edge_groups.keys()}
+    size_map = {start_vertices: START_NODE_SIZE for start_vertices in edge_groups.keys()}
     pos = nx.get_node_attributes(G, 'pos')
     edge_trace = _get_edge_trace(G, pos)
     node_trace = _get_node_trace(G, color_map, pos, size_map)
@@ -94,7 +105,7 @@ def _get_node_trace(G, color_map, pos, size_map):
         ),
         line_width=2)
     node_trace.text = [node for node in G.nodes]
-    node_trace.marker.size = [size_map.get(node, 10) for node in G.nodes]
+    node_trace.marker.size = [size_map.get(node, NODE_SIZE) for node in G.nodes]
     node_trace.marker.color = [color_map[node] for node in G.nodes]
     return node_trace
 
