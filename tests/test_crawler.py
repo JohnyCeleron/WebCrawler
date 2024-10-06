@@ -1,4 +1,3 @@
-from aioresponses import aioresponses
 import pytest
 
 import tests.html_constants as html_constants
@@ -64,6 +63,25 @@ class TestCrawler:
                                               expected_count_crawled_urls):
         async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
                                     start_urls=start_urls, check_robots_txt=False) as crawler:
+            await crawler.run()
+        count_crawled_urls = crawler.getter_meta.get_count_crawled_urls()
+        assert count_crawled_urls == expected_count_crawled_urls
+
+    @pytest.mark.parametrize(
+        "max_depth, max_urls, start_urls, expected_count_crawled_urls", [
+            (1, 1, [BASE_URL], 1),
+            (2, 2, [BASE_URL], 2),
+            (2, 1, [BASE_URL], 1),
+            (2, 10, [BASE_URL, OTHER_URL], 10),
+            (2, 1, [BASE_URL, OTHER_URL, IMG_URL], 1),
+            (1, 1, ["https://www.base_url.org/bar1"], 0)
+        ])
+    @pytest.mark.asyncio
+    async def test_crawler_with_robots_txt(self, mock_urls, mock_robots_txt, max_depth,
+                                           max_urls, start_urls, expected_count_crawled_urls):
+        async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
+                                  start_urls=start_urls,
+                                  check_robots_txt=False) as crawler:
             await crawler.run()
         count_crawled_urls = crawler.getter_meta.get_count_crawled_urls()
         assert count_crawled_urls == expected_count_crawled_urls

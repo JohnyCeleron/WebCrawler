@@ -170,70 +170,92 @@ HTML_BAR2 = HTML_BAR1
 TEST_RESPONSE = {
     BASE_URL: {
         "status": 200,
-        "html_content": HTML_WITH_MORE_THAN_FIVE_URLS
+        "html_content": HTML_WITH_MORE_THAN_FIVE_URLS,
+        "can_fetch": True
     },
     "https://www.base_url.org/foo1": {
         "status": 200,
-        "html_content": HTML_FOO1
+        "html_content": HTML_FOO1,
+        "can_fetch": True
     },
     "https://www.base_url.org/foo2": {
         "status": 200,
-        "html_content": HTML_FOO2
+        "html_content": HTML_FOO2,
+        "can_fetch": False
     },
     "https://www.base_url.org/foo3": {
         "status": 200,
-        "html_content": HTML_FOO3
+        "html_content": HTML_FOO3,
+        "can_fetch": True
     },
     "https://www.base_url.org/foo4": {
         "status": 200,
-        "html_content": HTML_FOO4
+        "html_content": HTML_FOO4,
+        "can_fetch": False
     },
     "https://www.base_url.org/foo5": {
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": False
     },
     "https://www.base_url.org/foo6": {
         "status": 200,
-        "html_content": HTML_WITHOUT_URL
+        "html_content": HTML_WITHOUT_URL,
+        "can_fetch": True
     },
     "https://www.base_url.org/bar1": {
         "status": 200,
-        "html_content": HTML_BAR1
+        "html_content": HTML_BAR1,
+        "can_fetch": False
     },
     "https://www.base_url.org/bar2": {
         "status": 200,
-        "html_content": HTML_BAR2
+        "html_content": HTML_BAR2,
+        "can_fetch": True
     },
     "https://www.other_url.org/": {
         "status": 200,
-        "html_content": HTML_WITH_OTHER_URL
+        "html_content": HTML_WITH_OTHER_URL,
+        "can_fetch": True
     },
     "https://www.image_url.org/": {
         "status": 200,
-        "html_content": HTML_WITH_IMG
+        "html_content": HTML_WITH_IMG,
+        "can_fetch": True
     },
     "https://www.other.org/foo3":{
-        "status": 403,
-        "html_content": ""
+        "status": 404,
+        "html_content": "",
+        "can_fetch": True
     },
     "https://www.other_url.org/foo1":{
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": True
     },
     "https://www.other_url.org/foo2":{
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": True
     },
     "https://www.other_url.org/foo3":{
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": True
     },
     "https://www.other_url.org/foo4/other/base_url.org":{
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": True
     },
     "https://www.other_url.org/foo5":{
         "status": 404,
-        "html_content": ""
+        "html_content": "",
+        "can_fetch": True
+    },
+    "https://www.other_url.org/foo6":{
+        "status":200,
+        "html_content": HTML_WITHOUT_URL,
+        "can_fetch": True
     }
 }

@@ -3,12 +3,12 @@ import json
 import os
 from urllib.parse import urljoin
 
-import aiohttp
 from bs4 import BeautifulSoup
 
 from src.crawler import WebCrawler
 from src.enums import FileType, InitType
 from src.metadata_controller import Builder
+
 UPLOAD_DATA_LOCK = asyncio.Lock()
 PROCESS_PAGE_LOCK = asyncio.Lock()
 

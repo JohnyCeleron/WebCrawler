@@ -1,10 +1,10 @@
 import json
-from aioresponses import aioresponses
+import os
+
 import aiohttp
 import pytest
-import os
-import tests.html_constants as html_constants
 
+import tests.html_constants as html_constants
 from src.image_crawler import ImageCrawler
 
 
