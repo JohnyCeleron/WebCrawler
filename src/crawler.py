@@ -173,6 +173,9 @@ class WebCrawler(abc.ABC):
     async def _get_html_content(self, current_url):
         async with self.session.get(current_url,
                                     timeout=self.TIMEOUT_CONNECTION) as response:
+            if not response.ok:
+                raise aiohttp.ClientResponseError\
+                    (history=None, request_info=None, status=response.status)
             html_content = await response.text()
         return html_content
 

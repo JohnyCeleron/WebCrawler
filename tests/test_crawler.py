@@ -1,4 +1,4 @@
-import aiohttp
+from aioresponses import aioresponses
 import pytest
 
 import tests.html_constants as html_constants
@@ -36,6 +36,7 @@ class TestCrawler:
     BASE_URL = 'https://www.base_url.org/'
     OTHER_URL = 'https://www.other_url.org/'
     IMG_URL = "https://www.image_url.org/"
+
     @pytest.mark.parametrize("max_depth,max_urls, start_urls", [
         (-1, 5, [BASE_URL]),
         (0, 5, [BASE_URL]),
@@ -60,23 +61,15 @@ class TestCrawler:
     @pytest.mark.asyncio
     async def test_crawler_without_robots_txt(self, max_depth, max_urls,
                                               start_urls,
-                                              expected_count_crawled_urls,
-                                              monkeypatch):
-        count_crawled_urls = 0
+                                              expected_count_crawled_urls):
+        with aioresponses() as m:
+            for url, response_data in html_constants.TEST_RESPONSE.items():
+                status = response_data['status']
+                html_content = response_data['html_content']
+                m.get(url, body=html_content, status=status)
 
-        async def mock_get_html_content(_, url):
-            nonlocal count_crawled_urls
-            count_crawled_urls += 1
-            if url not in html_constants.TEST_RESPONSE:
-                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
-            html_content = html_constants.TEST_RESPONSE[url]["html_content"]
-            if html_content == 'error':
-                raise aiohttp.ClientResponseError(history=None, request_info=None, status=404)
-            return html_content
-
-        monkeypatch.setattr("src.crawler.WebCrawler._get_html_content",
-                            mock_get_html_content, raising=True)
-        async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
-                                  start_urls=start_urls, check_robots_txt=False) as crawler:
-            await crawler.run()
+            async with DefaultCrawler(max_depth=max_depth, max_urls=max_urls,
+                                      start_urls=start_urls, check_robots_txt=False) as crawler:
+                await crawler.run()
+                count_crawled_urls = crawler.getter_meta.get_count_crawled_urls()
         assert count_crawled_urls == expected_count_crawled_urls

@@ -190,7 +190,7 @@ TEST_RESPONSE = {
     },
     "https://www.base_url.org/foo5": {
         "status": 404,
-        "html_content": "error"
+        "html_content": ""
     },
     "https://www.base_url.org/foo6": {
         "status": 200,
@@ -211,5 +211,29 @@ TEST_RESPONSE = {
     "https://www.image_url.org/": {
         "status": 200,
         "html_content": HTML_WITH_IMG
+    },
+    "https://www.other.org/foo3":{
+        "status": 403,
+        "html_content": ""
+    },
+    "https://www.other_url.org/foo1":{
+        "status": 404,
+        "html_content": ""
+    },
+    "https://www.other_url.org/foo2":{
+        "status": 404,
+        "html_content": ""
+    },
+    "https://www.other_url.org/foo3":{
+        "status": 404,
+        "html_content": ""
+    },
+    "https://www.other_url.org/foo4/other/base_url.org":{
+        "status": 404,
+        "html_content": ""
+    },
+    "https://www.other_url.org/foo5":{
+        "status": 404,
+        "html_content": ""
     }
 }
